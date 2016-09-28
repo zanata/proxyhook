@@ -17,6 +17,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class WebhookToWebSocket extends AbstractVerticle {
     private static final String APP_NAME = WebhookToWebSocket.class.getName();
@@ -32,19 +33,26 @@ public class WebhookToWebSocket extends AbstractVerticle {
         }
     }
 
+    // TODO use http://vertx.io/docs/vertx-core/java/#_vert_x_command_line_interface_api
+    // not this mess
     private List<String> getArgs() {
         // command line is of the pattern "vertx run [options] main-verticle"
         // so strip off everything up to the Verticle class name
         List<String> processArgs = vertx.getOrCreateContext().processArgs();
-        log.info("processArgs: " + processArgs);
+        log.debug("processArgs: " + processArgs);
         int n = processArgs.indexOf(getClass().getName());
-        return processArgs.subList(n + 1, processArgs.size());
+        List<String> argsAfterClass = processArgs.subList(n + 1, processArgs.size());
+        List<String> result = argsAfterClass.stream().filter(arg -> !arg.startsWith("-")).collect(Collectors.toList());
+        log.info("args: " + result);
+        return result;
     }
 
     @Override
     public void start() throws Exception {
+        // this /shouldn't/ be needed for deployment failures
+//        vertx.exceptionHandler(this::die);
         List<String> args = getArgs();
-        if (args.isEmpty() || args.get(0).equals("--server")) {
+        if (args.isEmpty()) {
             startServer();
         } else {
             startClient(args);
@@ -61,7 +69,7 @@ public class WebhookToWebSocket extends AbstractVerticle {
 //    }
 
     private void startServer() {
-        String host = System.getProperty("http.address", "0.0.0.0");
+        String host = System.getProperty("http.address", "127.0.0.1");
         int port = Integer.getInteger("http.port", 8080);
         log.info("Starting webhook/websocket server on " + host + ":" + port);
 
@@ -123,7 +131,12 @@ public class WebhookToWebSocket extends AbstractVerticle {
                 log.info("un-registering connection with id: " + id);
                 connections.remove(id);
             });
-        }).listen();
+        }).listen(e -> {
+            if (e.failed()) {
+                die(e.cause());
+//                die(e.cause(), server);
+            }
+        });
     }
 
     boolean isUTF8(String contentType) {
@@ -178,22 +191,28 @@ public class WebhookToWebSocket extends AbstractVerticle {
     }
 
     private void startClient(List<String> urls) {
-        System.out.println("starting client against URLs " + urls);
-        String webSocketAbsoluteUri = urls.get(0);
         if (urls.size() < 2) {
             throw new RuntimeException("Usage: http://websocket.example.com/listen/ http://target1.example.com/ [http://target2.example.com/ ...]");
         }
+        String webSocketAbsoluteUri = urls.get(0);
         List<String> webhookUrls = urls.subList(1, urls.size());
-        URL url = parseUrl(webSocketAbsoluteUri);
-        String webSocketRelativeUri = url.getFile();
+        log.info("starting client for websocket: " + webSocketAbsoluteUri + " posting to webhook URLs: " + webhookUrls);
+        URL wsUrl = parseUrl(webSocketAbsoluteUri);
+        String webSocketRelativeUri = wsUrl.getFile();
         HttpClientOptions options = new HttpClientOptions()
                 .setMaxWebsocketFrameSize(MAX_FRAME_SIZE)
-                .setDefaultHost(url.getHost())
-                .setDefaultPort(getPort(url));
+                .setDefaultHost(wsUrl.getHost())
+                .setDefaultPort(getPort(wsUrl));
         HttpClient client = vertx.createHttpClient(options);
 
         client.websocket(webSocketRelativeUri, webSocket -> {
+            // FIXME try to reconnect in case:
+            // - server is restarted
+            // - server is still starting
+            // - connection breaks because of transient network error
+            // OR just die, so that systemd can restart the process
             webSocket.frameHandler((WebSocketFrame frame) -> {
+                // FIXME handle fragments
                 if (!frame.isFinal()) {
                     log.warn("Ignoring unexpected non-final frame");
                     return;
@@ -217,7 +236,7 @@ public class WebhookToWebSocket extends AbstractVerticle {
                 MultiMap headers = jsonToMultiMap(headerPairs);
                 String bufferText = msg.getString("bufferText");
                 byte[] buffer = msg.getBinary("buffer");
-//                System.err.println("buffer: "+ Arrays.toString(buffer));
+//                log.debug("buffer: "+ Arrays.toString(buffer));
 
                 for (String webhookUri: webhookUrls) {
                     HttpClientRequest request = client.postAbs(webhookUri, response -> {
@@ -233,15 +252,13 @@ public class WebhookToWebSocket extends AbstractVerticle {
                     }
                 }
             });
-//        }, this::die);
-        }, e -> die(e, client));
-
+        }, this::die);
     }
 
-    private void die(Throwable e, HttpClient client) {
-        e.printStackTrace();
-        client.close();
-//        vertx.close();
+    private void die(Throwable e) {
+        log.fatal("dying", e);
+        vertx.close();
     }
+
 }
 
