@@ -1,2 +1,3 @@
 #!/bin/bash
-mvn exec:exec@run-app
+./gradlew shadowJar
+java -jar build/libs/*.jar

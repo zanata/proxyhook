@@ -1,45 +1,46 @@
-= Vert.x Simple Maven Verticle project
+= Vert.x Simple Gradle Verticle project
 
-This project is very similar to the maven-simplest project but instead of embedding Vert.x it shows an example
+This project is very similar to the gradle-simplest project but instead of embedding Vert.x it shows an example
 of writing the code as a verticle.
 
 You can run it directly in your IDE by creating a run configuration that uses the main class `io.vertx.core.Launcher`
-and passes in the arguments `run io.vertx.example.HelloWorldVerticle`.
+and passes in the arguments `run org.flanigan.webhook.vertx.WebhookToWebSocket`.
 
-The pom.xml uses the Maven shade plugin to assemble the application and all it's dependencies into a single "fat" jar.
+The build.gradle uses the Gradle shadowJar plugin to assemble the application and all it's dependencies into a single "fat" jar.
 
-To build a "fat jar"
+To build the "fat jar"
 
-    mvn package
+    ./gradlew shadowJar
 
 To run the fat jar:
 
-    java -jar target/maven-verticle-3.2.1-fat.jar
+    java -jar build/libs/webhook-vertx-0.1-SNAPSHOT-fat.jar
 
 (You can take that jar and run it anywhere there is a Java 8+ JDK. It contains all the dependencies it needs so you
 don't need to install Vert.x on the target machine).
 
-Now point your browser at http://localhost:8080
 
+= Vert.x 3.2 Gradle redeploy project
 
-The application can be launched directly from Maven:
+This project shows how to use the Vert.x 3.2 redeploy feature. Vert.x watches for file changes and will then compile these changes. The verticle will be redeployed automatically.
+Simply start the application with:
 
-* to run it using the classes form target/classes: `mvn compile exec:java@run`
-* to run the fat jar: `mvn package exec:exec@run-app`
+    ./gradlew run
 
-Writing code in verticles allow you to scale it more easily, e.g. let's say you have 8 cores on your server and you
-want to utilize them all, you can deploy 8 instances as follows:
+Now point your browser at http://localhost:8080. Then you can make changes to the verticle and reload the browser.
 
-    java -jar target/maven-verticle-3.2.1-fat.jar -instances 8
+The whole configuration for this is rather simple:
 
-You can also enable clustering and ha at the command line, e.g.
+    mainClassName = 'io.vertx.core.Launcher'
+    def mainVerticleName = 'org.flanigan.webhook.vertx.WebhookToWebSocket'
 
-    java -jar target/maven-verticle-3.2.1-fat.jar -cluster
+    // Vert.x watches for file changes in all subdirectories
+    // of src/ but only for files with .java extension
+    def watchForChange = 'src/**/*.java'
 
-    java -jar target/maven-verticle-3.2.1-fat.jar -ha
+    // Vert.x will call this task on changes
+    def doOnChange = './gradlew classes'
 
-You can also pass a configuration to the verticle:
-
-    java -jar target/maven-verticle-3.2.1-fat.jar -conf src/conf/my-conf.json
-
-Please see the docs for a full list of Vert.x command line options.
+    run {
+        args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"]
+    }
