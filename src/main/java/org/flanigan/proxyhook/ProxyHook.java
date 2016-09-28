@@ -1,4 +1,4 @@
-package org.flanigan.webhook.vertx;
+package org.flanigan.proxyhook;
 
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.vertx.core.AbstractVerticle;
@@ -19,9 +19,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class WebhookToWebSocket extends AbstractVerticle {
-    private static final String APP_NAME = WebhookToWebSocket.class.getName();
-    private static final Logger log = LoggerFactory.getLogger(WebhookToWebSocket.class);
+public class ProxyHook extends AbstractVerticle {
+    private static final String APP_NAME = ProxyHook.class.getName();
+    private static final Logger log = LoggerFactory.getLogger(ProxyHook.class);
     // 10 megabytes
     public static final int MAX_FRAME_SIZE = 10_000_000;
 

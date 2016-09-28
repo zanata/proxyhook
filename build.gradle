@@ -16,7 +16,7 @@ dependencies {
 }
 
 mainClassName = 'io.vertx.core.Launcher'
-def mainVerticleName = 'org.flanigan.webhook.vertx.WebhookToWebSocket'
+def mainVerticleName = 'org.flanigan.proxyhook.ProxyHook'
 
 // Vert.x watches for file changes in all subdirectories
 // of src/ but only for files with .java extension

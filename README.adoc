@@ -4,7 +4,7 @@ This project is very similar to the gradle-simplest project but instead of embed
 of writing the code as a verticle.
 
 You can run it directly in your IDE by creating a run configuration that uses the main class `io.vertx.core.Launcher`
-and passes in the arguments `run org.flanigan.webhook.vertx.WebhookToWebSocket`.
+and passes in the arguments `run org.flanigan.proxyhook.ProxyHook`.
 
 The build.gradle uses the Gradle shadowJar plugin to assemble the application and all it's dependencies into a single "fat" jar.
 
@@ -14,7 +14,7 @@ To build the "fat jar"
 
 To run the fat jar:
 
-    java -jar build/libs/webhook-vertx-0.1-SNAPSHOT-fat.jar
+    java -jar build/libs/proxyhook-0.1-SNAPSHOT-fat.jar
 
 (You can take that jar and run it anywhere there is a Java 8+ JDK. It contains all the dependencies it needs so you
 don't need to install Vert.x on the target machine).
@@ -32,7 +32,7 @@ Now point your browser at http://localhost:8080. Then you can make changes to th
 The whole configuration for this is rather simple:
 
     mainClassName = 'io.vertx.core.Launcher'
-    def mainVerticleName = 'org.flanigan.webhook.vertx.WebhookToWebSocket'
+    def mainVerticleName = 'org.flanigan.proxyhook.ProxyHook'
 
     // Vert.x watches for file changes in all subdirectories
     // of src/ but only for files with .java extension
