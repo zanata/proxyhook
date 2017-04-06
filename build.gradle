@@ -12,6 +12,7 @@ version = '0.1-SNAPSHOT'
 sourceCompatibility = '1.8'
 
 dependencies {
+  compile 'de.svenkubiak:jBCrypt:0.4.1'
   compile "io.vertx:vertx-core:3.3.3"
 }
 
@@ -26,13 +27,13 @@ def watchForChange = 'src/**/*.java'
 //def doOnChange = './gradlew classes'
 def doOnChange = 'gradlew classes'
 
-//task runServer(type: JavaExec)
-//
-//runServer {
-//  classpath = sourceSets.main.runtimeClasspath
-//  main = mainClassName
-//  args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"]
-//}
+task runMain(type: JavaExec)
+
+runMain {
+  classpath = sourceSets.main.runtimeClasspath
+  main = mainVerticleName
+  args = []
+}
 
 run {
   def urls = System.getProperty('urls') ?: ''
