@@ -58,11 +58,12 @@ public class ProxyHookServer extends AbstractProxyHook {
         if (passhash != null) {
             log.info("password is set");
         } else {
-            log.warn("{} is not set; authentication is disabled", PROXYHOOK_PASSHASH);
+            log.warn("{0} is not set; authentication is disabled", PROXYHOOK_PASSHASH);
         }
         String host = System.getProperty("http.address", "127.0.0.1");
         int port = Integer.getInteger("http.port", 8080);
         log.info("Starting webhook/websocket server on " + host + ":" + port);
+        logOpenShiftDetails();
 
         HttpServerOptions options = new HttpServerOptions()
                 .setMaxWebsocketFrameSize(MAX_FRAME_SIZE)
@@ -74,13 +75,12 @@ public class ProxyHookServer extends AbstractProxyHook {
         LocalMap<String, Boolean> connections = vertx.sharedData().getLocalMap("connections");
 
         server.requestHandler((HttpServerRequest req) -> {
-            log.info("handling request");
-            // TODO only forward POST method
-            // TODO keySet might be a little expensive
             Set<String> listeners = connections.keySet();
+            // TODO use BodyHandler.create().setBodyLimit() somehow
             req.bodyHandler(buffer -> {
                 if (req.method() != HttpMethod.POST) return;
-//                if (req.uri().equals("/listen")) return;
+                log.info("handling POST request");
+                // TODO return a 400 if body (or msgString) is > MAX_FRAME_SIZE
                 // nothing to do?
                 if (listeners.isEmpty()) return;
                 log.info("handling POST for {} listeners", listeners.size());
@@ -90,13 +90,12 @@ public class ProxyHookServer extends AbstractProxyHook {
                 }
                 log.info("Webhook "+req.path()+" received "+buffer.length()+" bytes. Forwarded to "+describe(listeners)+".");
             });
+            // TODO this should happen inside bodyHandler
             req.response()
                     .setStatusCode(200)
-                    .setStatusMessage("Received by "+APP_NAME+" ("+describe(listeners)+")")
-                    .end("Received.");
+                    .end("Received by "+APP_NAME+" ("+describe(listeners)+")");
         });
         server.websocketHandler((ServerWebSocket webSocket) -> {
-            // TODO security: check a password or something (needs SSL)
             if (!webSocket.path().equals("/listen")) {
                 log.warn("wrong path for websocket connection");
                 webSocket.reject();
@@ -131,6 +130,15 @@ public class ProxyHookServer extends AbstractProxyHook {
 //                die(e.cause(), server);
             }
         });
+    }
+
+    private void logOpenShiftDetails() {
+        String appDns = System.getenv("OPENSHIFT_APP_DNS");
+        if (appDns != null) {
+            log.info("Running on OpenShift");
+            log.info("WebHooks should be POSTed to https://{0}/", appDns);
+            log.info("ProxyHook client should connect to https://{0}:8433/listen", appDns);
+        }
     }
 
     private void registerWebsocket(LocalMap<String, Boolean> connections,
