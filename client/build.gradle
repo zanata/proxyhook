@@ -25,7 +25,9 @@ def doOnChange = 'gradlew classes'
 //noinspection GroovyAssignabilityCheck
 run {
     def urls = System.getProperty('urls') ?: ''
-    args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"] + urls.tokenize()
+    args = ['run', mainVerticleName] + urls.tokenize()
+    // redeploy doesn't stop the old code, for some reason
+//    args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"] + urls.tokenize()
 }
 
 shadowJar {

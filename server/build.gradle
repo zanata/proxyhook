@@ -29,7 +29,8 @@ runMain {
 
 //noinspection GroovyAssignabilityCheck
 run {
-    args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"]
+    args = ['run', mainVerticleName]
+//    args = ['run', mainVerticleName, "--redeploy=$watchForChange", "--launcher-class=$mainClassName", "--on-redeploy=$doOnChange"]
 }
 
 shadowJar {
