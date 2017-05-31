@@ -23,21 +23,17 @@ package org.flanigan.proxyhook.common;
 /**
  * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
  */
-public class Constants {
-    private Constants() {
+public class Keys {
+    private Keys() {
     }
 
-    // should fit inside MAX_FRAME_SIZE after encoding
-    public static final int MAX_BODY_SIZE = 6_000_000;
-
-    // 10 megabytes. GitHub payloads are a maximum of 5MB.
-    // https://developer.github.com/webhooks/#payloads
-    public static final int MAX_FRAME_SIZE = 10_000_000;
-
-    public static final String PROXYHOOK_PASSHASH = "PROXYHOOK_PASSHASH";
-    public static final String PROXYHOOK_PASSWORD = "PROXYHOOK_PASSWORD";
-
-    public static final String PATH_WEBHOOK = "webhook";
-    public static final String PATH_WEBSOCKET = "listen";
-
+    public static final String TYPE = "type";
+    public static final String PASSWORD = "password";
+    public static final String PATH = "path";
+    public static final String QUERY = "query";
+    public static final String HEADERS = "headers";
+    public static final String HOST = "host";
+    public static final String BUFFER = "buffer";
+    public static final String BUFFER_TEXT = "bufferText";
+    public static final String PING_ID = "pingId";
 }
