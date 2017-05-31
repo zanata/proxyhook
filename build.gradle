@@ -2,6 +2,7 @@ subprojects {
 
   apply plugin: 'java'
   apply plugin: 'jacoco'
+  apply plugin: 'findbugs'
 
   repositories {
     jcenter()
@@ -31,4 +32,12 @@ subprojects {
 //    html.enabled false
     }
   }
+
+  tasks.withType(FindBugs) {
+    reports {
+      xml.enabled true
+//      html.enabled true
+    }
+  }
+
 }
