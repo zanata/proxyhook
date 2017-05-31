@@ -45,3 +45,47 @@ shadowJar {
     }
 }
 
+task tarball(type: Tar, dependsOn: [clean, shadowJar]) {
+//    archiveName = 'build/server-deploy.tar.gz'
+    baseName = 'server-deploy'
+    destinationDir = file('build')
+    extension = 'tar.gz'
+    compression = Compression.GZIP
+    into('repo/application') {
+        from 'build/libs'
+        // this wildcard is why we need a clean build (partly)
+        include 'server-*-fat.jar'
+    }
+    into('/') {
+        from 'src/openshift2'
+    }
+}
+
+task enableBinaryDeployment(type: Exec) {
+    doFirst {
+        println "Configuring OpenShift app with name " +
+            "${System.env.PROXYHOOK_APP} in namespace " +
+            "${System.env.PROXYHOOK_NAMESPACE}"
+        println commandLine.join(' ')
+    }
+    commandLine 'rhc', 'configure-app', System.env.PROXYHOOK_APP,
+        '--namespace', System.env.PROXYHOOK_NAMESPACE, '--deployment-type',
+        'binary'
+    onlyIf {
+        System.env.PROXYHOOK_NAMESPACE != null && System.env.PROXYHOOK_APP != null
+    }
+}
+
+task deploy(type: Exec, dependsOn: [tarball, enableBinaryDeployment]) {
+    doFirst {
+        println "Deploying to OpenShift app with name " +
+            "${System.env.PROXYHOOK_APP} in namespace " +
+            "${System.env.PROXYHOOK_NAMESPACE}"
+        println commandLine.join(' ')
+    }
+    commandLine 'rhc', 'deploy', '--app', System.env.PROXYHOOK_APP,
+        '--namespace', System.env.PROXYHOOK_NAMESPACE, tarball.archivePath
+    onlyIf {
+        System.env.PROXYHOOK_NAMESPACE != null && System.env.PROXYHOOK_APP != null
+    }
+}
