@@ -10,6 +10,10 @@ dependencies {
 mainClassName = 'io.vertx.core.Launcher'
 def mainVerticleName = 'org.flanigan.proxyhook.client.ProxyHookClient'
 
+// enable debugger on a random port
+applicationDefaultJvmArgs = ['-Xdebug', '-Xrunjdwp:transport=dt_socket,address=0,server=y,suspend=n', '-Dsun.net.inetaddr.ttl=0', '-Dsun.net.inetaddr.negative.ttl=0']
+
+
 // Vert.x watches for file changes in all subdirectories
 // of src/ but only for files with .java extension
 // NB this won't pick up changes in :common
