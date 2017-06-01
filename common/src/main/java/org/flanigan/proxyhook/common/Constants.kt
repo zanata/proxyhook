@@ -18,26 +18,24 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.common;
+package org.flanigan.proxyhook.common
 
 /**
- * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
+ * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-public class Constants {
-    private Constants() {
-    }
+object Constants {
 
     // should fit inside MAX_FRAME_SIZE after encoding
-    public static final int MAX_BODY_SIZE = 6_000_000;
+    const val MAX_BODY_SIZE = 6_000_000
 
     // 10 megabytes. GitHub payloads are a maximum of 5MB.
     // https://developer.github.com/webhooks/#payloads
-    public static final int MAX_FRAME_SIZE = 10_000_000;
+    const val MAX_FRAME_SIZE = 10_000_000
 
-    public static final String PROXYHOOK_PASSHASH = "PROXYHOOK_PASSHASH";
-    public static final String PROXYHOOK_PASSWORD = "PROXYHOOK_PASSWORD";
+    const val PROXYHOOK_PASSHASH = "PROXYHOOK_PASSHASH"
+    const val PROXYHOOK_PASSWORD = "PROXYHOOK_PASSWORD"
 
-    public static final String PATH_WEBHOOK = "webhook";
-    public static final String PATH_WEBSOCKET = "listen";
+    const val PATH_WEBHOOK = "webhook"
+    const val PATH_WEBSOCKET = "listen"
 
 }

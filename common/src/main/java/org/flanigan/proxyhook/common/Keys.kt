@@ -18,35 +18,19 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.common;
-
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.vertx.core.MultiMap;
-import io.vertx.core.http.impl.HeadersAdaptor;
-import io.vertx.core.json.JsonArray;
+package org.flanigan.proxyhook.common
 
 /**
- * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
+ * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-public class JsonUtil {
-
-    private JsonUtil() {
-    }
-
-    public static JsonArray multiMapToJson(MultiMap headers) {
-        JsonArray headerList = new JsonArray();
-        headers.forEach(entry ->
-                headerList.add(new JsonArray().add(entry.getKey()).add(entry.getValue())));
-        return headerList;
-    }
-
-    public static MultiMap jsonToMultiMap(JsonArray pairs) {
-        MultiMap map = new HeadersAdaptor(new DefaultHttpHeaders());
-        pairs.forEach(pair -> {
-            JsonArray p = (JsonArray) pair;
-            map.add(p.getString(0), p.getString(1));
-        });
-        return map;
-    }
-
+object Keys {
+    const val TYPE = "type"
+    const val PASSWORD = "password"
+    const val PATH = "path"
+    const val QUERY = "query"
+    const val HEADERS = "headers"
+    const val HOST = "host"
+    const val BUFFER = "buffer"
+    const val BUFFER_TEXT = "bufferText"
+    const val PING_ID = "pingId"
 }

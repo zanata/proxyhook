@@ -18,22 +18,32 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.common;
+package org.flanigan.proxyhook.common
+
+import io.netty.handler.codec.http.DefaultHttpHeaders
+import io.vertx.core.MultiMap
+import io.vertx.core.http.impl.HeadersAdaptor
+import io.vertx.core.json.JsonArray
 
 /**
- * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
+ * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-public class Keys {
-    private Keys() {
+object JsonUtil {
+
+    @JvmStatic
+    fun multiMapToJson(headers: MultiMap): JsonArray {
+        val headerList = JsonArray()
+        headers.forEach { entry -> headerList.add(JsonArray().add(entry.key).add(entry.value)) }
+        return headerList
     }
 
-    public static final String TYPE = "type";
-    public static final String PASSWORD = "password";
-    public static final String PATH = "path";
-    public static final String QUERY = "query";
-    public static final String HEADERS = "headers";
-    public static final String HOST = "host";
-    public static final String BUFFER = "buffer";
-    public static final String BUFFER_TEXT = "bufferText";
-    public static final String PING_ID = "pingId";
+    fun jsonToMultiMap(pairs: JsonArray): MultiMap {
+        val map = HeadersAdaptor(DefaultHttpHeaders())
+        pairs.forEach { pair ->
+            val p = pair as JsonArray
+            map.add(p.getString(0), p.getString(1))
+        }
+        return map
+    }
+
 }
