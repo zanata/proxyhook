@@ -10,7 +10,6 @@ buildscript {
 
 subprojects {
   apply plugin: 'kotlin'
-  apply plugin: 'java'
   apply plugin: 'jacoco'
   apply plugin: 'findbugs'
 

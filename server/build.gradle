@@ -12,9 +12,9 @@ mainClassName = 'io.vertx.core.Launcher'
 def mainVerticleName = 'org.flanigan.proxyhook.server.ProxyHookServer'
 
 // Vert.x watches for file changes in all subdirectories
-// of src/ but only for files with .java extension
+// of src/ but only for files with .kt extension
 // NB this won't pick up changes in :common
-def watchForChange = 'src/**/*.java'
+def watchForChange = 'src/**/*.kt'
 
 // Vert.x will call this task on changes
 def doOnChange = 'gradlew classes'
