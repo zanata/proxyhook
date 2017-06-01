@@ -140,18 +140,15 @@ class ProxyHookClient : AbstractProxyHook() {
         if (args.size < 2) {
             die<Any>("Usage: wss://proxyhook.example.com/$PATH_WEBSOCKET http://target1.example.com/webhook [http://target2.example.com/webhook ...]")
         }
-        startClient(args)
+        startClient(args[0], args.subList(1, args.size))
     }
 
-    private fun startClient(urls: List<String>) {
-        assert(urls.size >= 2)
-        val webSocketAbsoluteUri = urls[0]
-        val webhookUrls = urls.subList(1, urls.size)
-        log.info("starting client for websocket: $webSocketAbsoluteUri posting to webhook URLs: $webhookUrls")
+    private fun startClient(webSocketUrl: String, webhookUrls: List<String>) {
+        log.info("starting client for websocket: $webSocketUrl posting to webhook URLs: $webhookUrls")
 
         webhookUrls.forEach { this.checkURI(it) }
 
-        val wsUri = parseUri(webSocketAbsoluteUri)
+        val wsUri = parseUri(webSocketUrl)
         val webSocketRelativeUri = getRelativeUri(wsUri)
         val useSSL = getSSL(wsUri)
         val wsOptions = HttpClientOptions()
