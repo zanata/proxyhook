@@ -1,6 +1,6 @@
 rootProject.name = 'proxyhook'
 
-include 'common', 'client', 'server'
+include 'common', 'client', 'server', 'pipeline'
 
 if (!JavaVersion.current().java8Compatible) {
   throw new IllegalStateException('''A Haiku:
