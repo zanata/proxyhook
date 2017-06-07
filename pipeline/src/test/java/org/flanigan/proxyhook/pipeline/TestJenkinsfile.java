@@ -74,7 +74,6 @@ public class TestJenkinsfile extends BasePipelineTestCPS {
                     return 0;
                 });
         // PipelineUnit(withCredentialsInterceptor) can't handle a List<Map>
-        // TODO for some reason the steps inside closure.call() are not shown as nested
         getHelper().registerAllowedMethod("withCredentials",
                 ImmutableList.of(List.class, Closure.class),
                 new Closure(null) {

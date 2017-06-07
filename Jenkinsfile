@@ -40,6 +40,9 @@ timestamps {
           sh "git clean -fdx"
         }
         stage('Build') {
+          // TODO detekt
+          // TODO deploy client
+          // TODO deploy server
           sh """./gradlew clean build shadowJar jacocoTestReport
           """
 
@@ -53,12 +56,27 @@ timestamps {
           // parse Jacoco test coverage
           step([$class: 'JacocoPublisher'])
 
-          // TODO codecov
-
           if (env.BRANCH_NAME == 'master') {
             step([$class: 'MasterCoverageAction'])
           } else if (env.BRANCH_NAME.startsWith('PR-')) {
             step([$class: 'CompareCoverageAction'])
+          }
+
+          // send test coverage data to codecov.io
+          try {
+            withCredentials(
+                [[$class: 'StringBinding',
+                  credentialsId: 'codecov_proxyhook',
+                  variable: 'CODECOV_TOKEN']]) {
+              // NB the codecov script uses CODECOV_TOKEN
+              sh "curl -s https://codecov.io/bash | bash -s - -K"
+            }
+          } catch (InterruptedException e) {
+            throw e
+          } catch (hudson.AbortException e) {
+            throw e
+          } catch (e) {
+            echo "[WARNING] Ignoring codecov error: $e"
           }
 
           // Reduce workspace size
