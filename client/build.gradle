@@ -6,6 +6,7 @@ plugins {
 dependencies {
     compile project(':common')
     testCompile project(':server')
+    testCompile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16'
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
 }
