@@ -20,15 +20,6 @@
  */
 package org.flanigan.proxyhook.client
 
-import java.net.InetAddress
-import java.net.URI
-import java.net.URISyntaxException
-import java.net.UnknownHostException
-import java.util.concurrent.ArrayBlockingQueue
-
-import org.flanigan.proxyhook.common.AbstractProxyHook
-import org.flanigan.proxyhook.common.MessageType
-import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.MultiMap
 import io.vertx.core.Vertx
@@ -39,8 +30,7 @@ import io.vertx.core.http.impl.FrameType
 import io.vertx.core.http.impl.ws.WebSocketFrameImpl
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
-
-import java.lang.System.getenv
+import org.flanigan.proxyhook.common.AbstractProxyHook
 import org.flanigan.proxyhook.common.Constants.MAX_FRAME_SIZE
 import org.flanigan.proxyhook.common.Constants.PATH_WEBSOCKET
 import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSWORD
@@ -52,8 +42,15 @@ import org.flanigan.proxyhook.common.Keys.HEADERS
 import org.flanigan.proxyhook.common.Keys.PASSWORD
 import org.flanigan.proxyhook.common.Keys.PING_ID
 import org.flanigan.proxyhook.common.Keys.TYPE
+import org.flanigan.proxyhook.common.MessageType
 import org.flanigan.proxyhook.common.MessageType.LOGIN
 import org.flanigan.proxyhook.common.MessageType.PONG
+import org.flanigan.proxyhook.common.StartupException
+import java.lang.System.getenv
+import java.net.InetAddress
+import java.net.URI
+import java.net.URISyntaxException
+import java.net.UnknownHostException
 
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
@@ -112,10 +109,11 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
                 .map { it.toLowerCase() }
 
         @JvmStatic fun main(args: Array<String>) {
-            val q = ArrayBlockingQueue<AsyncResult<String>>(1)
-            Vertx.vertx().deployVerticle(ProxyHookClient(null, args.toList()), { q.offer(it) })
-            val deploymentResult = q.take()
-            if (deploymentResult.failed()) throw deploymentResult.cause()
+            Vertx.vertx().deployVerticle(ProxyHookClient(null, args.toList()), { result ->
+                result.otherwise { e ->
+                    exit(e)
+                }
+            })
         }
     }
 
@@ -135,18 +133,15 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         return result
     }
 
-    @Throws(Exception::class)
-    override fun start() {
-        // this /shouldn't/ be needed for deployment failures:
-        // vertx.exceptionHandler(this::die);
+    override fun start(startFuture: Future<Void>) {
         val args = findArgs()
         if (args.size < 2) {
-            die("Usage: wss://proxyhook.example.com/$PATH_WEBSOCKET http://target1.example.com/webhook [http://target2.example.com/webhook ...]")
+            throw StartupException("Usage: wss://proxyhook.example.com/$PATH_WEBSOCKET http://target1.example.com/webhook [http://target2.example.com/webhook ...]")
         }
-        startClient(args[0], args.subList(1, args.size))
+        startClient(args[0], args.subList(1, args.size), startFuture)
     }
 
-    private fun startClient(webSocketUrl: String, webhookUrls: List<String>) {
+    private fun startClient(webSocketUrl: String, webhookUrls: List<String>, startFuture: Future<Void>) {
         log.info("starting client for websocket: $webSocketUrl posting to webhook URLs: $webhookUrls")
 
         webhookUrls.forEach { this.checkURI(it) }
@@ -165,12 +160,12 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         val wsClient = vertx.createHttpClient(wsOptions)
         val httpClient = vertx.createHttpClient()
 
-        connect(webhookUrls, webSocketRelativeUri, wsClient, httpClient)
+        connect(webhookUrls, webSocketRelativeUri, wsClient, httpClient, startFuture)
     }
 
     private fun connect(webhookUrls: List<String>,
                         webSocketRelativeUri: String, wsClient: HttpClient,
-                        httpClient: HttpClient) {
+                        httpClient: HttpClient, startFuture: Future<Void>? = null) {
         wsClient.websocket(webSocketRelativeUri, { webSocket ->
             var password: String? = getenv(PROXYHOOK_PASSWORD)
             if (password == null) password = ""
@@ -208,11 +203,12 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
                     MessageType.SUCCESS -> {
                         log.info("logged in")
                         ready?.complete()
+                        startFuture?.complete()
                     }
                     MessageType.FAILED -> {
                         webSocket.close()
                         wsClient.close()
-                        die("login failed")
+                        startFuture?.fail("login failed")
                     }
                     MessageType.WEBHOOK -> handleWebhook(webhookUrls, httpClient, msg)
                     MessageType.PING -> {
@@ -233,7 +229,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
                         // should we log a warning and keep going, to be more robust?
                         webSocket.close()
                         wsClient.close()
-                        die("unexpected message type: " + type)
+                        startFuture?.fail("unexpected message type: " + type)
                     }
                 }
             }
@@ -268,9 +264,8 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
             // ignoring result:
             InetAddress.getByName(hostname)
         } catch (e: UnknownHostException) {
-            die("Unable to resolve URI " + uri + ": " + e.message)
+            throw StartupException("Unable to resolve URI " + uri + ": " + e.message)
         }
-
     }
 
     private fun handleWebhook(webhookUrls: List<String>, client: HttpClient, msg: JsonObject) {
@@ -327,7 +322,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         when (protocol) {
             "ws" -> return false
             "wss" -> return true
-            else -> return die("expected URI with ws: or wss: : " + wsUri)
+            else -> throw StartupException("expected URI with ws: or wss: : " + wsUri)
         }
     }
 
@@ -338,7 +333,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
             when (protocol) {
                 "ws" -> return 80
                 "wss" -> return 443
-                else -> return die("expected URI with ws: or wss: : " + wsUri)
+                else -> throw StartupException("expected URI with ws: or wss: : " + wsUri)
             }
         }
         return port
@@ -348,19 +343,8 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         try {
             return URI(uri)
         } catch (e: URISyntaxException) {
-            return die("Invalid URI: " + uri)
+            throw StartupException("Invalid URI: " + uri)
         }
-
-    }
-
-    /**
-     * Exits after logging the specified error message
-     * @param s error message
-     */
-    private fun die(s: String): Nothing {
-        ready?.fail(s)
-        log.fatal(s)
-        startShutdown()
     }
 
 }

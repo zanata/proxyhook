@@ -20,6 +20,7 @@
  */
 package org.flanigan.proxyhook.server
 
+import io.vertx.core.Future
 import org.flanigan.proxyhook.common.AbstractProxyHook
 import org.flanigan.proxyhook.common.MessageType
 import org.mindrot.jbcrypt.BCrypt
@@ -57,11 +58,12 @@ import org.flanigan.proxyhook.common.MessageType.PING
 import org.flanigan.proxyhook.common.MessageType.PONG
 import org.flanigan.proxyhook.common.MessageType.SUCCESS
 import org.flanigan.proxyhook.common.MessageType.WEBHOOK
+import org.flanigan.proxyhook.common.StartupException
 
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookServer(val port: Int? = null) : AbstractProxyHook() {
+class ProxyHookServer(val port: Int? = null, var actualPort: Future<Int>? = null) : AbstractProxyHook() {
     //    private static final int HTTP_GATEWAY_TIMEOUT = 504;
 
     @Throws(Exception::class)
@@ -209,9 +211,11 @@ class ProxyHookServer(val port: Int? = null) : AbstractProxyHook() {
         }
         server.listen { startupResult ->
             if (startupResult.failed()) {
-                die(startupResult.cause())
+                actualPort?.fail(startupResult.cause())
+                throw StartupException(startupResult.cause())
             } else {
                 log.info("Started server on port ${server.actualPort()}")
+                actualPort?.complete(server.actualPort())
             }
         }
     }
@@ -293,18 +297,6 @@ class ProxyHookServer(val port: Int? = null) : AbstractProxyHook() {
                 // If in doubt, treat as non-Unicode
                 return false
         }
-    }
-
-    /**
-     * Exits after logging the specified throwable
-     * @param t throwable to log
-     * *
-     * @return nothing; does not return (generics trick from https://stackoverflow.com/a/15019663/14379)
-     */
-    private fun die(t: Throwable): Nothing {
-        log.fatal("dying", t)
-        @Suppress("UNREACHABLE_CODE")
-        return startShutdown()
     }
 
     companion object {

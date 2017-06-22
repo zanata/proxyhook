@@ -49,78 +49,59 @@ class IntegrationTest {
     }
 
     @Test
-    fun deliverProxiedWebhook2() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook3() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook4() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook5() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook6() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook7() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook8() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook9() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook10() {
-        deliverProxiedWebhook()
-    }
-    @Test
-    fun deliverProxiedWebhook11() {
-        deliverProxiedWebhook()
-    }
-    @Test
     fun deliverProxiedWebhook() {
         // this future will succeed if the test passes,
         // or fail if something goes wrong.
         val testFinished = CompletableFuture<Unit>()
 
-        val serverPort = chooseRandomPort()
-        val serverReady = Future.future<String>()
-        server.deployVerticle(ProxyHookServer(serverPort), serverReady.completer())
-        val postUrl = "http://localhost:$serverPort/webhook"
-        val websocketUrl = "ws://localhost:$serverPort/listen"
+        val serverPort = Future.future<Int>()
+        server.deployVerticle(ProxyHookServer(0, serverPort))
 
         val webhookPort = Future.future<Int>()
+        webhook.createHttpServer().requestHandler { req ->
+            req.response().statusCode = 200
+            req.response().end()
 
-        val clientReady = Future.future<Unit>()
+            req.bodyHandler { buffer ->
+                val payload = buffer.toString(Charsets.UTF_8)
+                if (payload == webhookPayload) {
+                    // we received the proxy webhook with its payload, so the test has passed:
+                    testFinished.complete(Unit)
+                } else {
+                    testFinished.completeExceptionally(AssertionError("wrong payload: $payload"))
+                }
+            }
+        }.listen(0) { // listen on random port
+            if (it.failed()) {
+                webhookPort.fail(it.cause())
+            } else {
+                val actualPort = it.result().actualPort()
+                log.info("webhook receiver ready on port $actualPort")
+                webhookPort.complete(actualPort)
+            }
+        }
 
-        // wait for proxyhook server and webhook receiver before starting client
-        CompositeFuture.all(serverReady, webhookPort).setHandler {
+        CompositeFuture.all(serverPort, webhookPort).compose<Unit> {
+            // wait for proxyhook server and webhook receiver before starting client
             if (it.failed()) testFinished.completeExceptionally(it.cause())
+            val websocketUrl = "ws://localhost:${serverPort.result()}/listen"
             val receiveUrl = "http://localhost:${webhookPort.result()}/"
 
+            log.info("deploying client")
+            val clientReady = Future.future<Unit>()
             client.deployVerticle(ProxyHookClient(clientReady, websocketUrl, receiveUrl)) {
                 if (it.failed()) {
                     testFinished.completeExceptionally(it.cause())
                 }
             }
-        }
-        // wait for client login before sending webhook to proxyhook server
-        clientReady.setHandler {
+            clientReady
+        }.setHandler {
+            // wait for client login before sending webhook to proxyhook server
             if (it.failed()) {
                 testFinished.completeExceptionally(it.cause())
             } else {
                 log.info("client ready, preparing to POST webhook")
+                val postUrl = "http://localhost:${serverPort.result()}/webhook"
 
                 val httpClient = DefaultAsyncHttpClient()
                 httpClient.preparePost(postUrl)
@@ -136,32 +117,8 @@ class IntegrationTest {
                         }
             }
         }
-        webhook.createHttpServer().requestHandler { req ->
-            req.response().statusCode = 200
-            req.response().end()
-
-            req.bodyHandler { buffer ->
-                val payload = buffer.toString(Charsets.UTF_8)
-                if (payload == webhookPayload) {
-                    // we received the proxy webhook with its payload, so the test has passed:
-                    testFinished.complete(Unit)
-                } else {
-                    testFinished.completeExceptionally(AssertionError("wrong payload: $payload"))
-                }
-            }
-
-        }.listen(0) {
-            if (it.failed()) webhookPort.fail(it.cause())
-            else webhookPort.complete(it.result().actualPort())
-        }
 
         testFinished.get(TEST_TIMEOUT_MS, MILLISECONDS)
     }
 
-    /**
-     * Warning: the port might be taken by another process before the caller gets a chance to use it.
-     */
-    fun chooseRandomPort(): Int {
-        ServerSocket(0).use { return it.localPort }
-    }
 }
