@@ -29,6 +29,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import org.flanigan.proxyhook.common.AbstractProxyHook
 import org.flanigan.proxyhook.common.MessageType
 import io.vertx.core.AsyncResult
+import io.vertx.core.Future
 import io.vertx.core.MultiMap
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
@@ -57,7 +58,8 @@ import org.flanigan.proxyhook.common.MessageType.PONG
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookClient : AbstractProxyHook() {
+class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<String>? = null) : AbstractProxyHook() {
+    constructor(ready: Future<Unit>?, vararg args: String) : this(ready, args.asList())
 
     companion object {
         private val APP_NAME = ProxyHookClient::class.java.name
@@ -101,17 +103,17 @@ class ProxyHookClient : AbstractProxyHook() {
                 "X-GitHub-Delivery",
                 "X-GitHub-Event",
                 "X-HTTP-Method-Override",
+                // gitlab signature: not yet: https://gitlab.com/gitlab-org/gitlab-ce/issues/4689
                 "X-Hub-Signature",
-                "X-Request-Id")
+                "X-Request-Id",
+                "X-Trello-Webhook",
+                "X-Zanata-Webhook")
+                // deliberately not included: Connection, Host, Origin, If-*, Cache-Control, Proxy-Authorization, Range, Upgrade
                 .map { it.toLowerCase() }
 
-        // deliberately not included: Connection, Host, Origin, If-*, Cache-Control, Proxy-Authorization, Range, Upgrade
-        private var processArgs: List<String>? = null
-
         @JvmStatic fun main(args: Array<String>) {
-            processArgs = args.toList()
             val q = ArrayBlockingQueue<AsyncResult<String>>(1)
-            Vertx.vertx().deployVerticle(ProxyHookClient(), { q.offer(it) })
+            Vertx.vertx().deployVerticle(ProxyHookClient(null, args.toList()), { q.offer(it) })
             val deploymentResult = q.take()
             if (deploymentResult.failed()) throw deploymentResult.cause()
         }
@@ -119,16 +121,17 @@ class ProxyHookClient : AbstractProxyHook() {
 
     // TODO use http://vertx.io/docs/vertx-core/java/#_vert_x_command_line_interface_api
     // not this mess.
-    // Command line is of the pattern "vertx run [options] main-verticle"
+    // Command line is of the pattern "vertx run [options] main-verticle [verticle_args...]"
     // so strip off everything up to the Verticle class name.
     private fun findArgs(): List<String> {
-        processArgs?.let { return it }
-        val processArgs = vertx.orCreateContext.processArgs()
+        verticleArgs?.let { return it }
+        val processArgs = vertx.orCreateContext.processArgs() ?: listOf()
         log.debug("processArgs: " + processArgs)
         val n = processArgs.indexOf(javaClass.name)
         val argsAfterClass = processArgs.subList(n + 1, processArgs.size)
         val result = argsAfterClass.filter { arg -> !arg.startsWith("-") }
         log.debug("args: " + result)
+        verticleArgs = result
         return result
     }
 
@@ -138,7 +141,7 @@ class ProxyHookClient : AbstractProxyHook() {
         // vertx.exceptionHandler(this::die);
         val args = findArgs()
         if (args.size < 2) {
-            die<Any>("Usage: wss://proxyhook.example.com/$PATH_WEBSOCKET http://target1.example.com/webhook [http://target2.example.com/webhook ...]")
+            die("Usage: wss://proxyhook.example.com/$PATH_WEBSOCKET http://target1.example.com/webhook [http://target2.example.com/webhook ...]")
         }
         startClient(args[0], args.subList(1, args.size))
     }
@@ -202,11 +205,14 @@ class ProxyHookClient : AbstractProxyHook() {
                 val type = msg.getString(TYPE)
                 val messageType = MessageType.valueOf(type)
                 when (messageType) {
-                    MessageType.SUCCESS -> log.info("logged in")
+                    MessageType.SUCCESS -> {
+                        log.info("logged in")
+                        ready?.complete()
+                    }
                     MessageType.FAILED -> {
                         webSocket.close()
                         wsClient.close()
-                        die<Any>("login failed")
+                        die("login failed")
                     }
                     MessageType.WEBHOOK -> handleWebhook(webhookUrls, httpClient, msg)
                     MessageType.PING -> {
@@ -227,7 +233,7 @@ class ProxyHookClient : AbstractProxyHook() {
                         // should we log a warning and keep going, to be more robust?
                         webSocket.close()
                         wsClient.close()
-                        die<Any>("unexpected message type: " + type)
+                        die("unexpected message type: " + type)
                     }
                 }
             }
@@ -262,7 +268,7 @@ class ProxyHookClient : AbstractProxyHook() {
             // ignoring result:
             InetAddress.getByName(hostname)
         } catch (e: UnknownHostException) {
-            die<Any>("Unable to resolve URI " + uri + ": " + e.message)
+            die("Unable to resolve URI " + uri + ": " + e.message)
         }
 
     }
@@ -345,6 +351,16 @@ class ProxyHookClient : AbstractProxyHook() {
             return die("Invalid URI: " + uri)
         }
 
+    }
+
+    /**
+     * Exits after logging the specified error message
+     * @param s error message
+     */
+    private fun die(s: String): Nothing {
+        ready?.fail(s)
+        log.fatal(s)
+        startShutdown()
     }
 
 }

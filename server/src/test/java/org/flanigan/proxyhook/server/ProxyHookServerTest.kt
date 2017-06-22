@@ -14,7 +14,7 @@ class ProxyHookServerTest {
 
     @Before
     fun setup() {
-        this.proxyHookServer = ProxyHookServer()
+        this.proxyHookServer = ProxyHookServer(0)
     }
 
     @Test

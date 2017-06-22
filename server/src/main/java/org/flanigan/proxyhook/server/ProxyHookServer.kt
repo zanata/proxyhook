@@ -23,17 +23,13 @@ package org.flanigan.proxyhook.server
 import org.flanigan.proxyhook.common.AbstractProxyHook
 import org.flanigan.proxyhook.common.MessageType
 import org.mindrot.jbcrypt.BCrypt
-import io.vertx.core.MultiMap
 import io.vertx.core.buffer.Buffer
-import io.vertx.core.eventbus.EventBus
 import io.vertx.core.http.CaseInsensitiveHeaders
 import io.vertx.core.http.HttpHeaders
-import io.vertx.core.http.HttpServer
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.http.HttpServerRequest
 import io.vertx.core.http.ServerWebSocket
 import io.vertx.core.json.JsonObject
-import io.vertx.core.logging.Logger
 import io.vertx.core.logging.LoggerFactory
 import io.vertx.core.shareddata.LocalMap
 import io.vertx.ext.web.Router
@@ -65,7 +61,7 @@ import org.flanigan.proxyhook.common.MessageType.WEBHOOK
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookServer : AbstractProxyHook() {
+class ProxyHookServer(val port: Int? = null) : AbstractProxyHook() {
     //    private static final int HTTP_GATEWAY_TIMEOUT = 504;
 
     @Throws(Exception::class)
@@ -77,15 +73,15 @@ class ProxyHookServer : AbstractProxyHook() {
             log.warn("{0} is not set; authentication is disabled", PROXYHOOK_PASSHASH)
         }
         val host = System.getProperty("http.address", "127.0.0.1")
-        val port = Integer.getInteger("http.port", 8080)!!
-        log.info("Starting webhook/websocket server on $host:$port")
+        val listenPort: Int = port ?: Integer.getInteger("http.port", 8080)!!
+        log.info("Starting webhook/websocket server on $host:$listenPort")
         logOpenShiftDetails()
 
         val options = HttpServerOptions()
                 // 60s timeout based on pings every 50s
                 .setIdleTimeout(60)
                 .setMaxWebsocketFrameSize(MAX_FRAME_SIZE)
-                .setPort(port)
+                .setPort(listenPort)
                 .setHost(host)
         val server = vertx.createHttpServer(options)
         val eventBus = vertx.eventBus()
@@ -95,7 +91,7 @@ class ProxyHookServer : AbstractProxyHook() {
 
         vertx.setPeriodic(50_000) {
             // TODO clustering: should iterate through websockets of this verticle only (eg a local HashMap?)
-            connections.keySet().forEach { connection ->
+            connections.keys.forEach { connection ->
 
                 // this is probably the correct way (ping frame triggers pong, closes websocket if no data received before idleTimeout in TCPSSLOptions):
                 //                WebSocketFrameImpl frame = new WebSocketFrameImpl(FrameType.PING, io.netty.buffer.Unpooled.copyLong(System.currentTimeMillis()));
@@ -115,13 +111,13 @@ class ProxyHookServer : AbstractProxyHook() {
                 //                .handler(LoggerHandler.create())
                 .failureHandler(ErrorHandler.create())
         // we need to respond to GET / so that health checks will work:
-        router.get("/").handler { routingContext -> routingContext.response().setStatusCode(HTTP_OK).end(APP_NAME + " (" + describe(connections.size()) + ")") }
+        router.get("/").handler { routingContext -> routingContext.response().setStatusCode(HTTP_OK).end(APP_NAME + " (" + describe(connections.size) + ")") }
         // see https://github.com/vert-x3/vertx-health-check if we need more features
         router.get("/ready").handler { routingContext ->
             routingContext.response()
                     // if there are no connections, webhooks won't be delivered, thus HTTP_SERVICE_UNAVAILABLE
-                    .setStatusCode(if (connections.isEmpty) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
-                    .end(APP_NAME + " (" + describe(connections.size()) + ")")
+                    .setStatusCode(if (connections.isEmpty()) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
+                    .end(APP_NAME + " (" + describe(connections.size) + ")")
         }
         router.post("/" + PATH_WEBHOOK).handler { routingContext ->
             log.info("handling POST request")
@@ -133,7 +129,7 @@ class ProxyHookServer : AbstractProxyHook() {
                 }
             }
             val statusCode: Int
-            val listeners = connections.keySet()
+            val listeners = connections.keys
             log.info("handling POST for {0} listeners", listeners.size)
             if (!listeners.isEmpty()) {
                 val body = routingContext.body
@@ -213,7 +209,9 @@ class ProxyHookServer : AbstractProxyHook() {
         }
         server.listen { startupResult ->
             if (startupResult.failed()) {
-                die<Any>(startupResult.cause())
+                die(startupResult.cause())
+            } else {
+                log.info("Started server on port ${server.actualPort()}")
             }
         }
     }
@@ -234,16 +232,16 @@ class ProxyHookServer : AbstractProxyHook() {
         val clientIP = getClientIP(webSocket)
         log.info("Adding connection. ID: $id IP: $clientIP")
         connections.put(id, true)
-        log.info("Total connections: {0}", connections.size())
+        log.info("Total connections: {0}", connections.size)
         webSocket.closeHandler {
             log.info("Connection closed. ID: {0} IP: {1}", id, clientIP)
             connections.remove(id)
-            log.info("Total connections: {0}", connections.size())
+            log.info("Total connections: {0}", connections.size)
         }
         webSocket.exceptionHandler { e ->
             log.warn("Connection error. ID: {0} IP: {1}", e, id, clientIP)
             connections.remove(id)
-            log.info("Total connections: {0}", connections.size())
+            log.info("Total connections: {0}", connections.size)
         }
     }
 
@@ -275,7 +273,8 @@ class ProxyHookServer : AbstractProxyHook() {
         return msg.encode()
     }
 
-    internal fun treatAsUTF8(contentType: String): Boolean {
+    internal fun treatAsUTF8(contentType: String?): Boolean {
+        if (contentType == null) return false // equiv. to application/octet-stream
         val contentTypeSplit = contentType.toLowerCase().split("; *".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
         for (s in contentTypeSplit) {
             if (s.matches("charset=(utf-?8|ascii)".toRegex())) {
@@ -294,6 +293,18 @@ class ProxyHookServer : AbstractProxyHook() {
                 // If in doubt, treat as non-Unicode
                 return false
         }
+    }
+
+    /**
+     * Exits after logging the specified throwable
+     * @param t throwable to log
+     * *
+     * @return nothing; does not return (generics trick from https://stackoverflow.com/a/15019663/14379)
+     */
+    private fun die(t: Throwable): Nothing {
+        log.fatal("dying", t)
+        @Suppress("UNREACHABLE_CODE")
+        return startShutdown()
     }
 
     companion object {
