@@ -8,7 +8,7 @@ import static java.util.concurrent.TimeUnit.SECONDS
 @Field String clientJarRegex = clientJarGlob.replace('*', '.*')
 
 def findClientPid() {
-    def process = ['pgrep', '--full', "java -jar $clientJarRegex"].execute()
+    def process = ['pgrep', '--full', "java .*-jar $clientJarRegex"].execute()
     if (process.waitFor() == 0) {
         def pid = process.in.text
         return pid
@@ -25,7 +25,7 @@ Process startClient() {
     println "Starting ProxyHook client. Logging to $logFile"
     def proc = [
         'sh', '-c',
-        """exec nohup >$logFile 2>&1 java -jar $clientJarGlob \
+        """exec nohup >$logFile 2>&1 java -Xmx32M -jar $clientJarGlob \
            wss://proxyhook-zanata.rhcloud.com:8443/listen \
            https://zanata-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/github-webhook/"""
     ].execute()
