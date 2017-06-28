@@ -1,8 +1,12 @@
 #!/usr/bin/env groovy
 import static java.util.concurrent.TimeUnit.SECONDS
 
-// get the JVM environment variable
+// get the JVM environment variables
+
+// eg /home/jenkins/proxyhook
 clientDir = System.getenv('PROXYHOOK_CLIENT_HOME')
+// eg wss://proxyhook-example.rhcloud.com:8443/listen
+serverUrl = System.getenv('PROXYHOOK_SERVER')
 
 // but prefer Jenkins environment variable (if running inside Jenkins and var has been set)
 try {
@@ -12,6 +16,9 @@ try {
         envVars = envNodes.get(0).envVars
         if (envVars.PROXYHOOK_CLIENT_HOME) {
             clientDir = envVars.PROXYHOOK_CLIENT_HOME
+        }
+        if (envVars.PROXYHOOK_SERVER) {
+            serverUrl = envVars.PROXYHOOK_SERVER
         }
     }
 } catch (MissingPropertyException ignored) {
@@ -49,8 +56,8 @@ Process startClient() {
         'sh', '-c',
         // FIXME get these from Jenkins, or env vars
         """exec java >$logFile 2>&1 -Xmx32M -jar $clientJarFile \
-           wss://proxyhook-zanata.rhcloud.com:8443/listen \
-           https://zanata-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/github-webhook/"""
+           $serverUrl \
+           http://localhost:8080/github-webhook/"""
     ].execute()
 
     if (proc.waitFor(5, SECONDS)) {
