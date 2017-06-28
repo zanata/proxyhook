@@ -80,7 +80,7 @@ def killProcess(pid) {
     }
 }
 
-// NB as a child process, the client will be killed when Jenkins exits, but not when it restarts itself
+// NB as a child process, the client may be killed when Jenkins exits, but not when it restarts itself
 def oldPid = findClientPid()
 if (oldPid) {
     println "Found old ProxyHook client with pid $oldPid"
@@ -95,6 +95,8 @@ if (binding.hasVariable('args') && args.length != 0 && args[0] == 'kill') {
     startClient()
     if (oldPid) {
         killProcess(oldPid)
+        // wait so that findClientPid won't see the old process
+        sleep(300)
     }
 // TODO (Java 9) use Process.getPid(), maybe write it to a .pid file. (de.flapdoodle.embed.process could help on Java 8.)
     newPid = findClientPid()
