@@ -48,7 +48,7 @@ Process startClient() {
     def proc = [
         'sh', '-c',
         // FIXME get these from Jenkins, or env vars
-        """exec nohup >$logFile 2>&1 java -Xmx32M -jar $clientJarFile \
+        """exec java >$logFile 2>&1 -Xmx32M -jar $clientJarFile \
            wss://proxyhook-zanata.rhcloud.com:8443/listen \
            https://zanata-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/github-webhook/"""
     ].execute()
@@ -73,6 +73,7 @@ def killProcess(pid) {
     }
 }
 
+// NB as a child process, the client will be killed when Jenkins exits, but not when it restarts itself
 def oldPid = findClientPid()
 if (oldPid) {
     println "Found old ProxyHook client with pid $oldPid"
