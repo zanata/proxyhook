@@ -1,14 +1,36 @@
 #!/usr/bin/env groovy
-import groovy.transform.Field
-
 import static java.util.concurrent.TimeUnit.SECONDS
 
-@Field String logFile = 'proxyhook-client.log'
-@Field String clientJarGlob = 'proxyhook-client-fat.jar'
-@Field String clientJarRegex = clientJarGlob.replace('*', '.*')
+// get the JVM environment variable
+clientDir = System.getenv('PROXYHOOK_CLIENT_HOME')
+
+// but prefer Jenkins environment variable (if running inside Jenkins and var has been set)
+try {
+    globalProps = jenkins.model.Jenkins.instance.globalNodeProperties
+    envNodes = globalProps.getAll(hudson.slaves.EnvironmentVariablesNodeProperty.class)
+    if (envNodes) {
+        envVars = envNodes.get(0).envVars
+        if (envVars.PROXYHOOK_CLIENT_HOME) {
+            clientDir = envVars.PROXYHOOK_CLIENT_HOME
+        }
+    }
+} catch (MissingPropertyException ignored) {
+}
+if (clientDir == null) {
+    clientDir = System.getProperty('user.home')
+}
+
+logFile = "$clientDir/proxyhook-client.log"
+clientJarGlob = "proxyhook-client-fat.jar"
+clientJarFile = new File(clientDir, clientJarGlob)
+if (!clientJarFile.exists()) {
+    println "proxyhook client jar $clientJarFile not found."
+    return
+}
+clientJarRegex = clientJarGlob.replace('*', '.*')
 
 def findClientPid() {
-    def process = ['pgrep', '--full', "java .*-jar $clientJarRegex"].execute()
+    def process = ['pgrep', '--full', "java .*-jar .*$clientJarRegex"].execute()
     if (process.waitFor() == 0) {
         def pid = process.in.text
         return pid
@@ -25,7 +47,8 @@ Process startClient() {
     println "Starting ProxyHook client. Logging to $logFile"
     def proc = [
         'sh', '-c',
-        """exec nohup >$logFile 2>&1 java -Xmx32M -jar $clientJarGlob \
+        // FIXME get these from Jenkins, or env vars
+        """exec nohup >$logFile 2>&1 java -Xmx32M -jar $clientJarFile \
            wss://proxyhook-zanata.rhcloud.com:8443/listen \
            https://zanata-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/github-webhook/"""
     ].execute()
@@ -39,22 +62,33 @@ Process startClient() {
     return proc
 }
 
-if (binding.hasVariable('args') && args.length != 0 && args[0] == 'kill') {
-    def pid = findClientPid()
-    println "Killing client with pid $pid"
-    def proc = "kill -9 $pid".execute()
-    if (proc.waitFor() != 999) {
+def killProcess(pid) {
+    println "Killing process with pid $pid"
+    def cmd = "kill $pid"
+    println cmd
+    def proc = cmd.execute()
+    if (proc.waitFor() != 0) {
         println proc.in.text
         println proc.err.text
     }
-} else {
-    def pid = findClientPid()
-    if (pid) {
-        println "ProxyHookClient is already running, with pid $pid"
-    } else {
-        startClient()
-        // TODO (Java 9) use Process.getPid(), maybe write it to a .pid file. (de.flapdoodle.embed.process could help on Java 8.)
-        pid = findClientPid()
-        println "ProxyHookClient pid is $pid"
+}
+
+def oldPid = findClientPid()
+if (oldPid) {
+    println "Found old ProxyHook client with pid $oldPid"
+}
+
+if (binding.hasVariable('args') && args.length != 0 && args[0] == 'kill') {
+    if (oldPid) {
+        killProcess(oldPid)
     }
+} else {
+    // start the new client first, so that it is running before we stop the old client
+    startClient()
+    if (oldPid) {
+        killProcess(oldPid)
+    }
+// TODO (Java 9) use Process.getPid(), maybe write it to a .pid file. (de.flapdoodle.embed.process could help on Java 8.)
+    newPid = findClientPid()
+    println "New ProxyHook client pid is $newPid"
 }
