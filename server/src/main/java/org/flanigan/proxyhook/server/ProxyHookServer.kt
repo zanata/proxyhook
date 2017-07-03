@@ -66,7 +66,6 @@ import org.flanigan.proxyhook.common.StartupException
 class ProxyHookServer(val port: Int? = null, var actualPort: Future<Int>? = null) : AbstractProxyHook() {
     //    private static final int HTTP_GATEWAY_TIMEOUT = 504;
 
-    @Throws(Exception::class)
     override fun start() {
         val passhash = getenv(PROXYHOOK_PASSHASH)
         if (passhash != null) {
