@@ -20,6 +20,24 @@ def notify
 // initialiser must be run separately (bindings not available during compilation phase)
 notify = new Notifier(env, steps)
 
+// Decide whether the build should be tagged and deployed. If the result $tag
+// is non-null, a corresponding git tag $tag has been created. If the build
+// succeeds, we should push $tag and deploy the application. If the result
+// is null, this is not the master branch, and we should not perform any
+// release/deploy steps.
+String makeTag() {
+  if (env.BRANCH_NAME == 'master') {
+    sh './gradlew setVersionFromBuild'
+    def ver = readProperties('gradle.properties')?.version
+    if (ver == null) return null
+    def tag = 'v' + ver
+    sh "git commit gradle.properties -m 'Update version for $ver' && git tag $tag"
+    return tag
+  } else {
+    return null
+  }
+}
+
 // use timestamps for Jenkins logs
 timestamps {
   // allocate a node for build+unit tests
@@ -40,49 +58,88 @@ timestamps {
           sh "git clean -fdx"
         }
         stage('Build') {
-          // TODO detekt
-          // TODO deploy client
-          // TODO deploy server
+          def tag = makeTag()
+
+          // TODO run detekt
           sh """./gradlew clean build shadowJar jacocoTestReport
           """
 
           // archive build artifacts
           archive "**/build/libs/*.jar"
 
-
           // gather surefire results; mark build as unstable in case of failures
           junit(testResults: '**/build/test-results/*.xml')
+          notify.testResults("UNIT", currentBuild.result)
 
-          // parse Jacoco test coverage
-          step([$class: 'JacocoPublisher'])
+          if (currentBuild.result in ['SUCCESS', null]) {
+            // parse Jacoco test coverage
+            step([$class: 'JacocoPublisher'])
 
-          if (env.BRANCH_NAME == 'master') {
-            step([$class: 'MasterCoverageAction'])
-          } else if (env.BRANCH_NAME.startsWith('PR-')) {
-            step([$class: 'CompareCoverageAction'])
-          }
-
-          // send test coverage data to codecov.io
-          try {
-            withCredentials(
-                [[$class: 'StringBinding',
-                  credentialsId: 'codecov_proxyhook',
-                  variable: 'CODECOV_TOKEN']]) {
-              // NB the codecov script uses CODECOV_TOKEN
-              sh "curl -s https://codecov.io/bash | bash -s - -K"
+            if (env.BRANCH_NAME == 'master') {
+              step([$class: 'MasterCoverageAction'])
+            } else if (env.BRANCH_NAME.startsWith('PR-')) {
+              step([$class: 'CompareCoverageAction'])
             }
-          } catch (InterruptedException e) {
-            throw e
-          } catch (hudson.AbortException e) {
-            throw e
-          } catch (e) {
-            echo "[WARNING] Ignoring codecov error: $e"
+
+            // send test coverage data to codecov.io
+            try {
+              withCredentials(
+                  [[$class: 'StringBinding',
+                    credentialsId: 'codecov_proxyhook',
+                    variable: 'CODECOV_TOKEN']]) {
+                // NB the codecov script uses CODECOV_TOKEN
+                sh "curl -s https://codecov.io/bash | bash -s - -K"
+              }
+            } catch (InterruptedException e) {
+              throw e
+            } catch (hudson.AbortException e) {
+              throw e
+            } catch (e) {
+              echo "[WARNING] Ignoring codecov error: $e"
+            }
+
+            if (tag) {
+              // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
+              sshagent(['zanata-jenkins']) {
+                def sshRepo = "git@github.com:zanata/proxyhook.git"
+                // TODO remove fetch, activate push
+                sh "git -c core.askpass=true fetch $sshRepo"
+//                sh "git -c core.askpass=true push $sshRepo $tag"
+              }
+
+              // deploy client
+              if (env.PROXYHOOK_CLIENT_HOME && env.PROXYHOOK_SERVER) {
+                // deploy new version of client
+                sh "cp client/client*-fat.jar ${env.PROXYHOOK_CLIENT_HOME}/proxyhook-client-fat.jar"
+                sh "cp client/init.groovy.d/proxyhook_client.groovy $JENKINS_HOME/init.groovy.d/proxyhook_client.groovy"
+                // restart the client
+                sh "$JENKINS_HOME/init.groovy.d/proxyhook_client.groovy"
+              }
+
+              // deploy server
+              sh "./gradlew :server:tarball -x clean -x shadowJar"
+              if (env.PROXYHOOK_NAMESPACE && env.PROXYHOOK_APP) {
+                // deploy new version of server
+                withCredentials([usernamePassword(
+                    credentialsId: 'openshift',
+                    usernameVariable: 'OPENSHIFT_LOGIN',
+                    passwordVariable: 'OPENSHIFT_PASSWORD')]) {
+                  docker.image('bigm/rhc').inside("-v /root/.openshift -v /private") {
+                    sh """rhc setup --rhlogin ${env.OPENSHIFT_LOGIN}
+                      --password ${env.OPENSHIFT_PASSWORD}"""
+                    sh """rhc deploy --app ${env.PROXYHOOK_APP}
+                        --namespace ${env.PROXYHOOK_NAMESPACE}
+                        server/build/server-deploy*.tar.gz"""
+                  }
+                }
+              }
+            }
+            notify.successful()
           }
 
           // Reduce workspace size
           sh "git clean -fdx"
         }
-        notify.testResults("UNIT", currentBuild.result)
       } catch (e) {
         notify.failed()
         currentBuild.result = 'FAILURE'
