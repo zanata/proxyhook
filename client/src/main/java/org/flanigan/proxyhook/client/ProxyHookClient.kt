@@ -61,6 +61,13 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
     companion object {
         private val APP_NAME = ProxyHookClient::class.java.name
         private val log = LoggerFactory.getLogger(ProxyHookClient::class.java)
+
+        private val sslInsecure: Boolean by lazy {
+            val insecure = getenv("SSL_INSECURE").equals(other = "true", ignoreCase = true)
+            if (insecure) log.warn("SSL hostname verification is disabled")
+            insecure
+        }
+
         // Request header references:
         // https://docs.gitlab.com/ce/user/project/integrations/webhooks.html
         // https://gitlab.com/gitlab-org/gitlab-ce/blob/v9.1.2/app/models/hooks/web_hook.rb#L60
@@ -149,16 +156,21 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         val wsUri = parseUri(webSocketUrl)
         val webSocketRelativeUri = getRelativeUri(wsUri)
         val useSSL = getSSL(wsUri)
-        val wsOptions = HttpClientOptions()
-                // 60s timeout based on pings from every 50s (both directions)
-                .setIdleTimeout(60)
-                .setConnectTimeout(10_000)
-                .setDefaultHost(wsUri.host)
-                .setDefaultPort(getWebsocketPort(wsUri))
-                .setMaxWebsocketFrameSize(MAX_FRAME_SIZE)
-                .setSsl(useSSL)
+        val wsOptions = HttpClientOptions().apply {
+            // 60s timeout based on pings from every 50s (both directions)
+            idleTimeout = 60
+            connectTimeout = 10_000
+            defaultHost = wsUri.host
+            defaultPort = getWebsocketPort(wsUri)
+            maxWebsocketFrameSize = MAX_FRAME_SIZE
+            isSsl = useSSL
+            isVerifyHost = !sslInsecure
+        }
         val wsClient = vertx.createHttpClient(wsOptions)
-        val httpClient = vertx.createHttpClient()
+        val httpOptions = HttpClientOptions().apply {
+            isVerifyHost = !sslInsecure
+        }
+        val httpClient = vertx.createHttpClient(httpOptions)
 
         connect(webhookUrls, webSocketRelativeUri, wsClient, httpClient, startFuture)
     }
