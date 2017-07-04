@@ -20,32 +20,33 @@
  */
 package org.flanigan.proxyhook.client
 
+import io.netty.buffer.Unpooled
+import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.MultiMap
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpClient
 import io.vertx.core.http.HttpClientOptions
+import io.vertx.core.http.HttpClientResponse
+import io.vertx.core.http.WebSocket
 import io.vertx.core.http.impl.FrameType
 import io.vertx.core.http.impl.ws.WebSocketFrameImpl
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
-import org.flanigan.proxyhook.common.AbstractProxyHook
+import org.flanigan.proxyhook.common.*
+import org.flanigan.proxyhook.common.Constants.EVENT_ID_HEADERS
 import org.flanigan.proxyhook.common.Constants.MAX_FRAME_SIZE
 import org.flanigan.proxyhook.common.Constants.PATH_WEBSOCKET
 import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSWORD
-import org.flanigan.proxyhook.common.JsonUtil.jsonToMultiMap
-import org.flanigan.proxyhook.common.JsonUtil.multiMapToJson
 import org.flanigan.proxyhook.common.Keys.BUFFER
 import org.flanigan.proxyhook.common.Keys.BUFFER_TEXT
 import org.flanigan.proxyhook.common.Keys.HEADERS
 import org.flanigan.proxyhook.common.Keys.PASSWORD
 import org.flanigan.proxyhook.common.Keys.PING_ID
 import org.flanigan.proxyhook.common.Keys.TYPE
-import org.flanigan.proxyhook.common.MessageType
 import org.flanigan.proxyhook.common.MessageType.LOGIN
 import org.flanigan.proxyhook.common.MessageType.PONG
-import org.flanigan.proxyhook.common.StartupException
 import java.lang.System.getenv
 import java.net.InetAddress
 import java.net.URI
@@ -53,9 +54,13 @@ import java.net.URISyntaxException
 import java.net.UnknownHostException
 
 /**
+ * The client component of ProxyHook, implemented as a vert.x verticle.
+ * @param args first arg is websocket URL for proxyhook server.
+ * other args are URLs where proxied webhooks will be delivered.
+ * @param ready optional Future which will complete when deployment is complete.
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<String>? = null) : AbstractProxyHook() {
+class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? = null) : AbstractVerticle() {
     constructor(ready: Future<Unit>?, vararg args: String) : this(ready, args.asList())
 
     companion object {
@@ -116,7 +121,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
                 .map { it.toLowerCase() }
 
         @JvmStatic fun main(args: Array<String>) {
-            Vertx.vertx().deployVerticle(ProxyHookClient(null, args.toList()), { result ->
+            Vertx.vertx().deployVerticle(ProxyHookClient(ready = null, args = args.toList()), { result ->
                 result.otherwise { e ->
                     exit(e)
                 }
@@ -129,14 +134,14 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
     // Command line is of the pattern "vertx run [options] main-verticle [verticle_args...]"
     // so strip off everything up to the Verticle class name.
     private fun findArgs(): List<String> {
-        verticleArgs?.let { return it }
+        args?.let { return it }
         val processArgs = vertx.orCreateContext.processArgs() ?: listOf()
         log.debug("processArgs: " + processArgs)
         val n = processArgs.indexOf(javaClass.name)
         val argsAfterClass = processArgs.subList(n + 1, processArgs.size)
         val result = argsAfterClass.filter { arg -> !arg.startsWith("-") }
         log.debug("args: " + result)
-        verticleArgs = result
+        args = result
         return result
     }
 
@@ -194,56 +199,10 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
             // TODO OR just die, so that (eg) systemd can restart the process
 
             val periodicTimer = vertx.setPeriodic(50_000) {
-                // ping frame triggers pong frame (inside vert.x), closes websocket if no data received before idleTimeout in TCPSSLOptions):
-                // TODO avoid importing from internal vertx package
-                val frame = WebSocketFrameImpl(FrameType.PING, io.netty.buffer.Unpooled.copyLong(System.currentTimeMillis()))
-                webSocket.writeFrame(frame)
-
-                // this doesn't work with a simple idle timeout, because sending the PING is considered write activity
-                //                JsonObject object = new JsonObject();
-                //                object.put(TYPE, PING);
-                //                object.put(PING_ID, String.valueOf(System.currentTimeMillis()));
-                //                webSocket.writeTextMessage(object.encode());
+                sendPingFrame(webSocket)
             }
             webSocket.handler { buf: Buffer ->
-                val msg = buf.toJsonObject()
-                log.debug("payload: {0}", msg)
-
-                val type = msg.getString(TYPE)
-                val messageType = MessageType.valueOf(type)
-                when (messageType) {
-                    MessageType.SUCCESS -> {
-                        log.info("logged in")
-                        ready?.complete()
-                        startFuture?.complete()
-                    }
-                    MessageType.FAILED -> {
-                        webSocket.close()
-                        wsClient.close()
-                        startFuture?.fail("login failed")
-                    }
-                    MessageType.WEBHOOK -> handleWebhook(webhookUrls, httpClient, msg)
-                    MessageType.PING -> {
-                        val pingId = msg.getString(PING_ID)
-                        log.debug("received PING with id {}", pingId)
-                        val pong = JsonObject()
-                        pong.put(TYPE, PONG)
-                        pong.put(PING_ID, pingId)
-                        webSocket.writeTextMessage(pong.encode())
-                    }
-                    PONG -> {
-                        val pongId = msg.getString(PING_ID)
-                        // TODO check ping ID
-                        log.debug("received PONG with id {}", pongId)
-                    }
-                    else -> {
-                        // TODO this might happen if the server is newer than the client
-                        // should we log a warning and keep going, to be more robust?
-                        webSocket.close()
-                        wsClient.close()
-                        startFuture?.fail("unexpected message type: " + type)
-                    }
-                }
+                handleWebSocket(webhookUrls, buf, webSocket, wsClient, httpClient, startFuture)
             }
             webSocket.closeHandler {
                 log.info("websocket closed")
@@ -270,6 +229,61 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         }
     }
 
+    // TODO too many params
+    private fun handleWebSocket(webhookUrls: List<String>, buf: Buffer, webSocket: WebSocket, wsClient: HttpClient, httpClient: HttpClient, startFuture: Future<Void>?) {
+        val msg = buf.toJsonObject()
+        log.debug("payload: {0}", msg)
+
+        val type = msg.getString(TYPE)
+        val messageType = MessageType.valueOf(type)
+        when (messageType) {
+            MessageType.SUCCESS -> {
+                log.info("logged in")
+                ready?.complete()
+                startFuture?.complete()
+            }
+            MessageType.FAILED -> {
+                webSocket.close()
+                wsClient.close()
+                startFuture?.fail("login failed")
+            }
+            MessageType.WEBHOOK -> handleWebhook(webhookUrls, httpClient, msg)
+            MessageType.PING -> {
+                val pingId = msg.getString(PING_ID)
+                log.debug("received PING with id {}", pingId)
+                val pong = JsonObject()
+                pong.put(TYPE, PONG)
+                pong.put(PING_ID, pingId)
+                webSocket.writeTextMessage(pong.encode())
+            }
+            PONG -> {
+                val pongId = msg.getString(PING_ID)
+                // TODO check ping ID
+                log.debug("received PONG with id {}", pongId)
+            }
+            else -> {
+                // TODO this might happen if the server is newer than the client
+                // should we log a warning and keep going, to be more robust?
+                webSocket.close()
+                wsClient.close()
+                startFuture?.fail("unexpected message type: " + type)
+            }
+        }
+    }
+
+    private fun sendPingFrame(webSocket: WebSocket) {
+        // ping frame triggers pong frame (inside vert.x), closes websocket if no data received before idleTimeout in TCPSSLOptions):
+        // TODO avoid importing from internal vertx package
+        val frame = WebSocketFrameImpl(FrameType.PING, Unpooled.copyLong(System.currentTimeMillis()))
+        webSocket.writeFrame(frame)
+
+        // this doesn't work with a simple idle timeout, because sending the PING is considered write activity
+        //                JsonObject object = new JsonObject();
+        //                object.put(TYPE, PING);
+        //                object.put(PING_ID, String.valueOf(System.currentTimeMillis()));
+        //                webSocket.writeTextMessage(object.encode());
+    }
+
     private fun checkURI(uri: String) {
         val hostname = parseUri(uri).host
         try {
@@ -289,11 +303,9 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
         val headerPairs = msg.getJsonArray(HEADERS)
         val headers = jsonToMultiMap(headerPairs)
 
-        for (header in EVENT_ID_HEADERS) {
-            if (headers.contains(header)) {
-                log.info("Webhook header {0}: {1}", header, headers.getAll(header))
-            }
-        }
+        EVENT_ID_HEADERS
+                .filter { headers.contains(it) }
+                .forEach { log.info("Webhook header {0}: {1}", it, headers.getAll(it)) }
 
         val bufferText = msg.getString(BUFFER_TEXT)
         val buffer = msg.getBinary(BUFFER)
@@ -301,9 +313,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
 
         for (webhookUri in webhookUrls) {
             val request = client.postAbs(webhookUri) { response ->
-                log.info("Webhook POSTed to URL: " + webhookUri)
-                log.info("Webhook POST response status: " + response.statusCode() + " " + response.statusMessage())
-                log.info("Webhook POST response headers: " + multiMapToJson(response.headers()))
+                logWebhookResponse(webhookUri, response)
             }
             //                request.putHeader("content-type", "text/plain")
             // some headers break things (eg Host), so we use a whitelist
@@ -315,6 +325,12 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var verticleArgs: List<St
                 request.end(Buffer.buffer(buffer))
             }
         }
+    }
+
+    private fun logWebhookResponse(webhookUri: String, response: HttpClientResponse) {
+        log.info("Webhook POSTed to URL: " + webhookUri)
+        log.info("Webhook POST response status: " + response.statusCode() + " " + response.statusMessage())
+        log.info("Webhook POST response headers: " + multiMapToJson(response.headers()))
     }
 
     private fun copyWebhookHeaders(fromHeaders: MultiMap, toHeaders: MultiMap) {

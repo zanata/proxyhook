@@ -50,17 +50,26 @@ class IntegrationTest {
     }
 
     @Test
-    fun deliverProxiedWebhook(): Unit = runBlocking {
+    fun rootDeployment() {
+        deliverProxiedWebhook("")
+    }
+
+    @Test
+    fun subPathDeployment() {
+        deliverProxiedWebhook("/proxyhook")
+    }
+
+    private fun deliverProxiedWebhook(prefix: String): Unit = runBlocking {
         // this future will succeed if the test passes,
         // or fail if something goes wrong.
         val testFinished = CompletableFuture<Unit>()
 
-        val (_, serverPort) = startServer()
+        val (_, serverPort) = startServer(prefix)
 
         val webhookPort = createWebhookReceiver(testFinished)
         val receiveUrl = "http://localhost:${webhookPort.await()}/"
-        val websocketUrl = "ws://localhost:${serverPort.await()}/listen"
-        val postUrl = "http://localhost:${serverPort.await()}/webhook"
+        val websocketUrl = "ws://localhost:${serverPort.await()}$prefix/listen"
+        val postUrl = "http://localhost:${serverPort.await()}$prefix/webhook"
         // wait for proxyhook server and webhook receiver before starting client
         val client = startClient(testFinished, websocketUrl, receiveUrl)
 
@@ -73,10 +82,10 @@ class IntegrationTest {
         testFinished.get(TEST_TIMEOUT_MS, MILLISECONDS)
     }
 
-    private suspend fun startServer(): Pair<Future<String>, Future<Int>> {
+    private suspend fun startServer(prefix: String): Pair<Future<String>, Future<Int>> {
         val actualPort = Future.future<Int>()
         val deploymentId = futureVx<String> { it: Handler<AsyncResult<String>> ->
-            server.deployVerticle(ProxyHookServer(0, actualPort), it)
+            server.deployVerticle(ProxyHookServer(port = 0, prefix = prefix, actualPort = actualPort), it)
         }
         return deploymentId to actualPort
     }

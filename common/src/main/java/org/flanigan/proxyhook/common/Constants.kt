@@ -25,6 +25,10 @@ package org.flanigan.proxyhook.common
  */
 object Constants {
 
+    val EVENT_ID_HEADERS = listOf(
+            "X-GitHub-Event", "X-Gitlab-Event",
+            "X-Correlation-ID", "X-GitHub-Delivery")
+
     // should fit inside MAX_FRAME_SIZE after encoding
     const val MAX_BODY_SIZE = 6_000_000
 
