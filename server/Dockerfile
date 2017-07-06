@@ -12,4 +12,4 @@ USER 64738
 # NB must use the exec form of ENTRYPOINT if you want to add arguments with CMD
 # https://docs.docker.com/engine/reference/builder/#exec-form-entrypoint-example
 
-ENTRYPOINT ["java", "-Dhttp.address=0.0.0.0", "-Xmx32M", "-jar", "server.jar"]
+ENTRYPOINT ["java", "-Dhttp.address=0.0.0.0", "-Xmx64M", "-jar", "server.jar"]
