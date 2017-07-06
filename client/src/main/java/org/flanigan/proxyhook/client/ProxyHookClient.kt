@@ -295,8 +295,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
     }
 
     private fun handleWebhook(webhookUrls: List<String>, client: HttpClient, msg: JsonObject) {
-        log.info("Webhook received")
-
+        log.info("Webhook received: {0}", msg)
         // TODO use host, path and/or query from webSocket message?
         //                String path = msg.getString("path");
         //                String query = msg.getString("query");
