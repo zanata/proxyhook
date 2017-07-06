@@ -8,6 +8,8 @@ clientDir = System.getenv('PROXYHOOK_CLIENT_HOME')
 // eg wss://proxyhook-example.rhcloud.com:8443/listen
 serverUrl = System.getenv('PROXYHOOK_SERVER')
 
+proxyhookPassword = System.getenv('PROXYHOOK_PASSWORD') ?: ''
+
 // but prefer Jenkins environment variable (if running inside Jenkins and var has been set)
 try {
     globalProps = jenkins.model.Jenkins.instance.globalNodeProperties
@@ -20,6 +22,9 @@ try {
         if (envVars.PROXYHOOK_SERVER) {
             serverUrl = envVars.PROXYHOOK_SERVER
         }
+        if (envVars.PROXYHOOK_PASSWORD) {
+            proxyhookPassword = envVars.PROXYHOOK_PASSWORD
+        }
     }
 } catch (MissingPropertyException ignored) {
 }
@@ -28,12 +33,14 @@ if (clientDir == null) {
 }
 
 logFile = "$clientDir/proxyhook-client.log"
-clientJarGlob = "proxyhook-client-fat.jar"
+clientJarGlob = 'proxyhook-client-fat.jar'
 clientJarFile = new File(clientDir, clientJarGlob)
 if (!clientJarFile.exists()) {
     println "proxyhook client jar $clientJarFile not found."
     return
 }
+keystoreFile = new File(clientDir, "proxyhook.keystore")
+setKeystore = keystoreFile.exists() ? "-Djavax.net.ssl.trustStore=$keystoreFile" : ''
 clientJarRegex = clientJarGlob.replace('*', '.*')
 
 def findClientPid() {
@@ -54,11 +61,10 @@ Process startClient() {
     println "Starting ProxyHook client. Logging to $logFile"
     def proc = [
         'sh', '-c',
-        // FIXME get these from Jenkins, or env vars
-        """exec java >$logFile 2>&1 -Xmx32M -jar $clientJarFile \
+        """exec java >$logFile 2>&1 -Xmx32M $setKeystore -jar $clientJarFile \
            $serverUrl \
            http://localhost:8080/github-webhook/"""
-    ].execute()
+    ].execute(["PROXYHOOK_PASSWORD=$proxyhookPassword"], null)
 
     if (proc.waitFor(5, SECONDS)) {
         println "Client failed (exit value: ${proc.exitValue()}). Output follows:"
