@@ -1,4 +1,4 @@
-package org.flanigan.proxyhook.client
+package org.zanata.proxyhook.client
 
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
@@ -9,7 +9,7 @@ import io.vertx.core.logging.LoggerFactory
 import io.vertx.ext.unit.junit.VertxUnitRunner
 import kotlinx.coroutines.experimental.runBlocking
 import org.asynchttpclient.DefaultAsyncHttpClient
-import org.flanigan.proxyhook.server.ProxyHookServer
+import org.zanata.proxyhook.server.ProxyHookServer
 import org.junit.After
 import org.junit.Before
 import org.junit.Test

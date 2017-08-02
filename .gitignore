@@ -4,3 +4,6 @@
 *.swp
 target/
 build/
+classes/
+*.jar
+*.keystore

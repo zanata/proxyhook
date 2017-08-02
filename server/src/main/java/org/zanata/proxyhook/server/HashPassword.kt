@@ -18,13 +18,13 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.server
+package org.zanata.proxyhook.server
 
 import org.mindrot.jbcrypt.BCrypt
 
 import java.lang.System.getenv
-import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSHASH
-import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSWORD
+import org.zanata.proxyhook.common.Constants.PROXYHOOK_PASSHASH
+import org.zanata.proxyhook.common.Constants.PROXYHOOK_PASSWORD
 
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)

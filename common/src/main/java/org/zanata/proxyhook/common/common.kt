@@ -1,7 +1,7 @@
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-package org.flanigan.proxyhook.common
+package org.zanata.proxyhook.common
 
 import io.netty.handler.codec.http.DefaultHttpHeaders
 import io.vertx.core.MultiMap
@@ -10,7 +10,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.logging.LoggerFactory
 import kotlin.system.exitProcess
 
-private val log = LoggerFactory.getLogger("org.flanigan.proxyhook.common")
+private val log = LoggerFactory.getLogger("org.zanata.proxyhook.common")
 
 /**
  * Exits after logging the specified throwable

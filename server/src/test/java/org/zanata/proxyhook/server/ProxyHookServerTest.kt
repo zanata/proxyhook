@@ -1,4 +1,4 @@
-package org.flanigan.proxyhook.server
+package org.zanata.proxyhook.server
 
 import org.junit.Before
 import org.junit.Test

@@ -18,7 +18,7 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.client
+package org.zanata.proxyhook.client
 
 import io.netty.buffer.Unpooled
 import io.vertx.core.AbstractVerticle
@@ -34,19 +34,19 @@ import io.vertx.core.http.impl.FrameType
 import io.vertx.core.http.impl.ws.WebSocketFrameImpl
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
-import org.flanigan.proxyhook.common.*
-import org.flanigan.proxyhook.common.Constants.EVENT_ID_HEADERS
-import org.flanigan.proxyhook.common.Constants.MAX_FRAME_SIZE
-import org.flanigan.proxyhook.common.Constants.PATH_WEBSOCKET
-import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSWORD
-import org.flanigan.proxyhook.common.Keys.BUFFER
-import org.flanigan.proxyhook.common.Keys.BUFFER_TEXT
-import org.flanigan.proxyhook.common.Keys.HEADERS
-import org.flanigan.proxyhook.common.Keys.PASSWORD
-import org.flanigan.proxyhook.common.Keys.PING_ID
-import org.flanigan.proxyhook.common.Keys.TYPE
-import org.flanigan.proxyhook.common.MessageType.LOGIN
-import org.flanigan.proxyhook.common.MessageType.PONG
+import org.zanata.proxyhook.common.*
+import org.zanata.proxyhook.common.Constants.EVENT_ID_HEADERS
+import org.zanata.proxyhook.common.Constants.MAX_FRAME_SIZE
+import org.zanata.proxyhook.common.Constants.PATH_WEBSOCKET
+import org.zanata.proxyhook.common.Constants.PROXYHOOK_PASSWORD
+import org.zanata.proxyhook.common.Keys.BUFFER
+import org.zanata.proxyhook.common.Keys.BUFFER_TEXT
+import org.zanata.proxyhook.common.Keys.HEADERS
+import org.zanata.proxyhook.common.Keys.PASSWORD
+import org.zanata.proxyhook.common.Keys.PING_ID
+import org.zanata.proxyhook.common.Keys.TYPE
+import org.zanata.proxyhook.common.MessageType.LOGIN
+import org.zanata.proxyhook.common.MessageType.PONG
 import java.lang.System.getenv
 import java.net.InetAddress
 import java.net.URI

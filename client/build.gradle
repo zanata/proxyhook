@@ -12,7 +12,7 @@ dependencies {
 }
 
 mainClassName = 'io.vertx.core.Launcher'
-def mainVerticleName = 'org.flanigan.proxyhook.client.ProxyHookClient'
+def mainVerticleName = 'org.zanata.proxyhook.client.ProxyHookClient'
 
 // enable debugger on a random port
 applicationDefaultJvmArgs = ['-Xdebug', '-Xrunjdwp:transport=dt_socket,address=0,server=y,suspend=n', '-Dsun.net.inetaddr.ttl=0', '-Dsun.net.inetaddr.negative.ttl=0']

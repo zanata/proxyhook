@@ -4,7 +4,7 @@ This project is very similar to the gradle-simplest project but instead of embed
 of writing the code as a verticle.
 
 You can run it directly in your IDE by creating a run configuration that uses the main class `io.vertx.core.Launcher`
-and passes in the arguments `run org.flanigan.proxyhook.AbstractProxyHook`.
+and passes in the arguments `run org.zanata.proxyhook.server.ProxyHookServer`.
 
 The build.gradle uses the Gradle shadowJar plugin to assemble the application and all it's dependencies into a single "fat" jar.
 
@@ -32,7 +32,7 @@ Now point your browser at http://localhost:8080. Then you can make changes to th
 The whole configuration for this is rather simple:
 
     mainClassName = 'io.vertx.core.Launcher'
-    def mainVerticleName = 'org.flanigan.proxyhook.AbstractProxyHook'
+    def mainVerticleName = 'org.zanata.proxyhook.server.ProxyHookServer'
 
     // Vert.x watches for file changes in all subdirectories
     // of src/ but only for files with .java extension

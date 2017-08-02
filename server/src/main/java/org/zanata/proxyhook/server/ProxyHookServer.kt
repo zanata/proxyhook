@@ -18,7 +18,7 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.flanigan.proxyhook.server
+package org.zanata.proxyhook.server
 
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -38,28 +38,32 @@ import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.handler.ErrorHandler
-import org.flanigan.proxyhook.common.*
-import org.flanigan.proxyhook.common.Constants.EVENT_ID_HEADERS
-import org.flanigan.proxyhook.common.Constants.MAX_BODY_SIZE
-import org.flanigan.proxyhook.common.Constants.MAX_FRAME_SIZE
-import org.flanigan.proxyhook.common.Constants.PATH_WEBHOOK
-import org.flanigan.proxyhook.common.Constants.PATH_WEBSOCKET
-import org.flanigan.proxyhook.common.Constants.PROXYHOOK_PASSHASH
-import org.flanigan.proxyhook.common.Keys.BUFFER
-import org.flanigan.proxyhook.common.Keys.BUFFER_TEXT
-import org.flanigan.proxyhook.common.Keys.HEADERS
-import org.flanigan.proxyhook.common.Keys.HOST
-import org.flanigan.proxyhook.common.Keys.PASSWORD
-import org.flanigan.proxyhook.common.Keys.PATH
-import org.flanigan.proxyhook.common.Keys.PING_ID
-import org.flanigan.proxyhook.common.Keys.QUERY
-import org.flanigan.proxyhook.common.Keys.TYPE
-import org.flanigan.proxyhook.common.MessageType.FAILED
-import org.flanigan.proxyhook.common.MessageType.LOGIN
-import org.flanigan.proxyhook.common.MessageType.PING
-import org.flanigan.proxyhook.common.MessageType.PONG
-import org.flanigan.proxyhook.common.MessageType.SUCCESS
-import org.flanigan.proxyhook.common.MessageType.WEBHOOK
+import org.zanata.proxyhook.common.*
+import org.zanata.proxyhook.common.Constants.EVENT_ID_HEADERS
+import org.zanata.proxyhook.common.Constants.MAX_BODY_SIZE
+import org.zanata.proxyhook.common.Constants.MAX_FRAME_SIZE
+import org.zanata.proxyhook.common.Constants.PATH_WEBHOOK
+import org.zanata.proxyhook.common.Constants.PATH_WEBSOCKET
+import org.zanata.proxyhook.common.Constants.PROXYHOOK_PASSHASH
+import org.zanata.proxyhook.common.Keys.BUFFER
+import org.zanata.proxyhook.common.Keys.BUFFER_TEXT
+import org.zanata.proxyhook.common.Keys.HEADERS
+import org.zanata.proxyhook.common.Keys.HOST
+import org.zanata.proxyhook.common.Keys.PASSWORD
+import org.zanata.proxyhook.common.Keys.PATH
+import org.zanata.proxyhook.common.Keys.PING_ID
+import org.zanata.proxyhook.common.Keys.QUERY
+import org.zanata.proxyhook.common.Keys.TYPE
+import org.zanata.proxyhook.common.MessageType
+import org.zanata.proxyhook.common.MessageType.FAILED
+import org.zanata.proxyhook.common.MessageType.LOGIN
+import org.zanata.proxyhook.common.MessageType.PING
+import org.zanata.proxyhook.common.MessageType.PONG
+import org.zanata.proxyhook.common.MessageType.SUCCESS
+import org.zanata.proxyhook.common.MessageType.WEBHOOK
+import org.zanata.proxyhook.common.StartupException
+import org.zanata.proxyhook.common.exit
+import org.zanata.proxyhook.common.multiMapToJson
 import java.lang.System.getenv
 import java.net.InetAddress
 import java.net.UnknownHostException
