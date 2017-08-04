@@ -67,9 +67,15 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
         private val APP_NAME = ProxyHookClient::class.java.name
         private val log = LoggerFactory.getLogger(ProxyHookClient::class.java)
 
-        private val sslInsecure: Boolean by lazy {
-            val insecure = getenv("SSL_INSECURE").equals(other = "true", ignoreCase = true)
-            if (insecure) log.warn("SSL hostname verification is disabled")
+        private val sslInsecureServer: Boolean by lazy {
+            val insecure = getenv("SSL_INSECURE_SERVER").equals(other = "true", ignoreCase = true)
+            if (insecure) log.warn("SSL hostname verification is disabled for server connection")
+            insecure
+        }
+
+        private val sslInsecureDelivery: Boolean by lazy {
+            val insecure = getenv("SSL_INSECURE_DELIVERY").equals(other = "true", ignoreCase = true)
+            if (insecure) log.warn("SSL hostname verification is disabled for webhook deliveries")
             insecure
         }
 
@@ -169,11 +175,13 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
             defaultPort = getWebsocketPort(wsUri)
             maxWebsocketFrameSize = MAX_FRAME_SIZE
             isSsl = useSSL
-            isVerifyHost = !sslInsecure
+            isVerifyHost = !sslInsecureServer
+            isTrustAll = sslInsecureServer
         }
         val wsClient = vertx.createHttpClient(wsOptions)
         val httpOptions = HttpClientOptions().apply {
-            isVerifyHost = !sslInsecure
+            isVerifyHost = !sslInsecureDelivery
+            isTrustAll = sslInsecureDelivery
         }
         val httpClient = vertx.createHttpClient(httpOptions)
 
