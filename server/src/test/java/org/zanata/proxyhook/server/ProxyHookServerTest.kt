@@ -1,9 +1,8 @@
 package org.zanata.proxyhook.server
 
+import org.assertj.core.api.KotlinAssertions.assertThat
 import org.junit.Before
 import org.junit.Test
-
-import org.assertj.core.api.Assertions.assertThat
 
 /**
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
