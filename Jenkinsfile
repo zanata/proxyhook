@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-@Library('zanata-pipeline-library@v0.2.0')
+@Library('zanata-pipeline-library@0.1')
 import org.zanata.jenkins.Notifier
 import org.zanata.jenkins.PullRequests
 import static org.zanata.jenkins.StackTraces.getStackTrace
