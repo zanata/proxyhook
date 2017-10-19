@@ -94,8 +94,10 @@ class TestJenkinsfile : BasePipelineTestCPS() {
 
         // these steps will be passed by reference to library methods
         val steps = HashMap<String, Closure<*>>()
-        steps.put("hipchatSend", Closure.IDENTITY)
-        steps.put("echo", Closure.IDENTITY)
+	steps.put("codecov", Closure.IDENTITY)
+	steps.put("hipchatSend", Closure.IDENTITY)
+	steps.put("echo", Closure.IDENTITY)
+        steps.put("sh", Closure.IDENTITY)
         // we need this for CPS mode
         MethodClosure.ALLOW_RESOLVE = true
 
