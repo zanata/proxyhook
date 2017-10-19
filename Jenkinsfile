@@ -1,24 +1,48 @@
 #!/usr/bin/env groovy
 
-@Library('zanata-pipeline-library@v0.2.0')
+@Field
+public static final String PROJ_URL = 'https://github.com/zanata/proxyhook'
+
+// Import pipeline library for utility methods & classes:
+// ansicolor(), Notifier, PullRequests, Strings
+@Field
+public static final String PIPELINE_LIBRARY_BRANCH = 'ZNTA-2234-tag'
+
+// GROOVY-3278:
+//   Using referenced String constant as value of Annotation causes compile error
+@Library('zanata-pipeline-library@ZNTA-2234-tag')
 import org.zanata.jenkins.Notifier
 import org.zanata.jenkins.PullRequests
+import static org.zanata.jenkins.Reporting.codecov
 import static org.zanata.jenkins.StackTraces.getStackTrace
-
 
 import groovy.transform.Field
 
-
 // The first milestone step starts tracking concurrent build order
 milestone()
-
 
 PullRequests.ensureJobDescription(env, manager, steps)
 
 @Field
 def notify
 // initialiser must be run separately (bindings not available during compilation phase)
-notify = new Notifier(env, steps)
+notify = new Notifier(env, steps, currentBuild,
+    PROJ_URL, 'Jenkinsfile', PIPELINE_LIBRARY_BRANCH,
+)
+
+/* Only keep the 10 most recent builds. */
+def projectProperties = [
+  [
+    $class: 'GithubProjectProperty',
+    projectUrlStr: PROJ_URL
+  ],
+  [
+    $class: 'BuildDiscarderProperty',
+    strategy: [$class: 'LogRotator', numToKeepStr: '10']
+  ],
+]
+properties(projectProperties)
+
 
 // Decide whether the build should be tagged and deployed. If the result $tag
 // is non-null, a corresponding git tag $tag has been created. If the build
@@ -58,6 +82,7 @@ timestamps {
           sh "git clean -fdx"
         }
         stage('Build') {
+          notify.startBuilding()
           def tag = makeTag()
 
           // TODO run detekt
@@ -82,21 +107,7 @@ timestamps {
             }
 
             // send test coverage data to codecov.io
-            try {
-              withCredentials(
-                  [[$class: 'StringBinding',
-                    credentialsId: 'codecov_proxyhook',
-                    variable: 'CODECOV_TOKEN']]) {
-                // NB the codecov script uses CODECOV_TOKEN
-                sh "curl -s https://codecov.io/bash | bash -s - -K"
-              }
-            } catch (InterruptedException e) {
-              throw e
-            } catch (hudson.AbortException e) {
-              throw e
-            } catch (e) {
-              echo "[WARNING] Ignoring codecov error: $e"
-            }
+            codecov(env, steps, PROJ_URL)
 
             if (tag) {
               // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
