@@ -1,10 +1,8 @@
 package org.flanigan.proxyhook.pipeline
 
 import com.cloudbees.groovy.cps.impl.CpsCallableInvocation
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
 import com.lesfurets.jenkins.unit.cps.BasePipelineTestCPS
-import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration
 import groovy.lang.Closure
 import org.codehaus.groovy.runtime.MethodClosure
 import org.junit.Before
@@ -65,13 +63,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
                     }
                     throw RuntimeException("Unmocked invocation")
                 })
-        helper.registerAllowedMethod(method("sh", Map::class.java),
-                Function { args: Map<String, *> ->
-                    if (TRUE == args["returnStatus"]) {
-                        return@Function 0
-                    }
-                    0
-                } as Function<*, *>)
+        helper.registerAllowedMethod(method("sh", Map::class.java), SH)
         // PipelineUnit(withCredentialsInterceptor) can't handle a List<Map>
         helper.registerAllowedMethod("withCredentials",
                 listOf(List::class.java, Closure::class.java),
@@ -94,15 +86,15 @@ class TestJenkinsfile : BasePipelineTestCPS() {
 
         // these steps will be passed by reference to library methods
         val steps = HashMap<String, Closure<*>>()
-	steps.put("codecov", Closure.IDENTITY)
-	steps.put("hipchatSend", Closure.IDENTITY)
-	steps.put("echo", Closure.IDENTITY)
-	steps.put("emailext", Closure.IDENTITY)
-	steps.put("emailextrecipients", Closure.IDENTITY)
-	steps.put("library", Closure.IDENTITY)
-        steps.put("sh", Closure.IDENTITY)
-	steps.put("step", Closure.IDENTITY)
-	// we need this for CPS mode
+        steps.put("codecov", Closure.IDENTITY)
+        steps.put("hipchatSend", Closure.IDENTITY)
+        steps.put("echo", Closure.IDENTITY)
+        steps.put("emailext", Closure.IDENTITY)
+        steps.put("emailextrecipients", Closure.IDENTITY)
+        steps.put("library", Closure.IDENTITY)
+        steps.put("sh", SH)
+        steps.put("step", Closure.IDENTITY)
+        // we need this for CPS mode
         MethodClosure.ALLOW_RESOLVE = true
 
         // global variables
@@ -133,4 +125,28 @@ class TestJenkinsfile : BasePipelineTestCPS() {
         }
     }
 
+}
+
+object SH : Closure<Any>(null) {
+    @Suppress("RedundantVisibilityModifier")
+    public fun doCall(arg: Any): Any {
+        if (arg is String) return 0
+        val args = arg as? Map<*, *> ?: throw Exception("expected a String or a Map of args")
+        if (TRUE == args["returnStdout"]) {
+            val script = args["script"].toString()
+            if (script.endsWith("allocate-jboss-ports")) {
+                return "JBOSS_HTTP_PORT=51081\nSMTP_PORT=34765\n"
+            }
+            if (script.startsWith("git ls-remote")) {
+                // ScmGit.getPullRequestNum in zanata-pipeline-library uses this:
+                return if (script.endsWith("refs/pull/*/head")) {
+                    "1234567890123456789012345678901234567890 refs/pull/123/head"
+                } else {
+                    // Notifier.groovy in zanata-pipeline-library uses this:
+                    return "1234567890123456789012345678901234567890 abcdef\n"
+                }
+            }
+        }
+        return 0
+    }
 }
