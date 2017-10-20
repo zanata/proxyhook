@@ -97,9 +97,9 @@ class TestJenkinsfile : BasePipelineTestCPS() {
 	steps.put("codecov", Closure.IDENTITY)
 	steps.put("hipchatSend", Closure.IDENTITY)
 	steps.put("echo", Closure.IDENTITY)
-	steps.put("emailext", Closure.IDENTITY);
-	steps.put("emailextrecipients", Closure.IDENTITY);
-	steps.put("library", Closure.IDENTITY);
+	steps.put("emailext", Closure.IDENTITY)
+	steps.put("emailextrecipients", Closure.IDENTITY)
+	steps.put("library", Closure.IDENTITY)
         steps.put("sh", Closure.IDENTITY)
 	steps.put("step", Closure.IDENTITY)
 	// we need this for CPS mode
@@ -120,7 +120,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
     fun shouldExecuteWithoutErrors() {
         try {
             // load and execute the Jenkinsfile
-            loadScript("../Jenkinsfile")
+            runScript("../Jenkinsfile")
             printCallStack()
             assertJobStatusSuccess()
             // TODO add assertions about call stack (but not too fragile)
