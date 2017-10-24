@@ -105,7 +105,7 @@ timestamps {
           archive "**/build/libs/*.jar"
 
           // gather surefire results; mark build as unstable in case of failures
-          junit(testResults: '**/build/test-results/*.xml')
+          junit(testResults: '**/build/test-results/**/*.xml')
           notify.testResults("UNIT", currentBuild.result)
 
           if (isBuildResultSuccess()) {
