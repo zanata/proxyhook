@@ -3,7 +3,6 @@ package org.flanigan.proxyhook.pipeline
 import com.cloudbees.groovy.cps.impl.CpsCallableInvocation
 import com.google.common.collect.ImmutableMap
 import com.lesfurets.jenkins.unit.cps.BasePipelineTestCPS
-import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration
 import groovy.lang.Closure
 import org.codehaus.groovy.runtime.MethodClosure
 import org.junit.Before
@@ -29,13 +28,13 @@ class TestJenkinsfile : BasePipelineTestCPS() {
     override fun setUp() {
         super.setUp()
 
-          LibraryConfiguration library = library()
+        val library = library()
                 .name("zanata-pipeline-library")
                 .retriever(gitSource("https://github.com/zanata/zanata-pipeline-library"))
                 // uncomment to use already-downloaded (perhaps modified) copy instead of git:
                 //                .retriever(localSource(LIB_PATH))
                 .targetPath(LIB_PATH)
-                .defaultVersion("master")
+                .defaultVersion("ZNTA-2234-tag")
                 .allowOverride(true)
                 .implicit(false)
                 .build()
