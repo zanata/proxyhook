@@ -10,6 +10,7 @@ import kotlin.coroutines.experimental.startCoroutine
 import kotlin.coroutines.experimental.suspendCoroutine
 
 /**
+ * TODO use vert.x 3.5.0's coroutine support instead
  * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
  */
 
