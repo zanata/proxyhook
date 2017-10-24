@@ -3,6 +3,7 @@ package org.flanigan.proxyhook.pipeline
 import com.cloudbees.groovy.cps.impl.CpsCallableInvocation
 import com.google.common.collect.ImmutableMap
 import com.lesfurets.jenkins.unit.cps.BasePipelineTestCPS
+import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration
 import groovy.lang.Closure
 import org.codehaus.groovy.runtime.MethodClosure
 import org.junit.Before
@@ -16,7 +17,6 @@ import com.lesfurets.jenkins.unit.global.lib.GitSource.gitSource
 import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration.library
 import java.lang.Boolean.TRUE
 import java.util.function.Function
-import org.zanata.jenkins.ScmGit
 
 // try 'extends BasePipelineTest' for debugging in case of weird Groovy exceptions
 class TestJenkinsfile : BasePipelineTestCPS() {
@@ -29,7 +29,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
     override fun setUp() {
         super.setUp()
 
-        val library = library()
+          LibraryConfiguration library = library()
                 .name("zanata-pipeline-library")
                 .retriever(gitSource("https://github.com/zanata/zanata-pipeline-library"))
                 // uncomment to use already-downloaded (perhaps modified) copy instead of git:
