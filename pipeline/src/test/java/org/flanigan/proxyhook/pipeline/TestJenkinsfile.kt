@@ -16,6 +16,7 @@ import com.lesfurets.jenkins.unit.global.lib.GitSource.gitSource
 import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration.library
 import java.lang.Boolean.TRUE
 import java.util.function.Function
+import org.zanata.jenkins.ScmGit
 
 // try 'extends BasePipelineTest' for debugging in case of weird Groovy exceptions
 class TestJenkinsfile : BasePipelineTestCPS() {
