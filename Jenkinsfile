@@ -13,6 +13,7 @@ public static final String PIPELINE_LIBRARY_BRANCH = 'ZNTA-2234-tag'
 @Library('zanata-pipeline-library@ZNTA-2234-tag')
 import org.zanata.jenkins.Notifier
 import org.zanata.jenkins.PullRequests
+import org.zanata.jenkins.ScmGit
 import static org.zanata.jenkins.Reporting.codecov
 import static org.zanata.jenkins.StackTraces.getStackTrace
 
@@ -24,11 +25,14 @@ milestone()
 PullRequests.ensureJobDescription(env, manager, steps)
 
 @Field
+def pipelineLibraryScmGit
+
+@Field
+def mainScmGit
+
+@Field
 def notify
 // initialiser must be run separately (bindings not available during compilation phase)
-notify = new Notifier(env, steps, currentBuild,
-    PROJ_URL, 'Jenkinsfile', PIPELINE_LIBRARY_BRANCH,
-)
 
 /* Only keep the 10 most recent builds. */
 def projectProperties = [
@@ -67,6 +71,13 @@ timestamps {
   // allocate a node for build+unit tests
   node() {
     echo "running on node ${env.NODE_NAME}"
+    pipelineLibraryScmGit = new ScmGit(env, steps, 'https://github.com/zanata/zanata-pipeline-library')
+    pipelineLibraryScmGit.init(PIPELINE_LIBRARY_BRANCH)
+    mainScmGit = new ScmGit(env, steps, PROJ_URL)
+    mainScmGit.init(env.BRANCH_NAME)
+    notify = new Notifier(env, steps, currentBuild,
+        pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
+    )
     // generate logs in colour
     ansicolor {
       try {
@@ -107,7 +118,7 @@ timestamps {
             }
 
             // send test coverage data to codecov.io
-            codecov(env, steps, PROJ_URL)
+            codecov(env, steps, mainScmGit)
 
             if (tag) {
               // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
