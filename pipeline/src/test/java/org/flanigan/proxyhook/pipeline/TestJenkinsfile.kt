@@ -21,7 +21,7 @@ import java.util.function.Function
 class TestJenkinsfile : BasePipelineTestCPS() {
 
     companion object {
-        private val LIB_PATH = "build/pipelinelibs"
+        private val LIB_PATH = "build/pipeline-libs"
     }
 
     @Before
@@ -140,14 +140,16 @@ object SH : Closure<Any>(null) {
             }
             if (script.startsWith("git ls-remote")) {
                 // ScmGit.init in zanata-pipeline-library uses these:
-                return if (script.endsWith("refs/pull/*/head")) {
-                    "1234567890123456789012345678901234567890 refs/pull/123/head"
-                } else if (script.endsWith("refs/heads/*")) {
-                  return "fc2b7c527e4401c03bcaf2833739d16e77698ab6 refs/heads/master\n" +
-                    "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/heads/ZNTA-2234-tag"
-                } else {
-                    // Notifier.groovy in zanata-pipeline-library uses this:
-                    return "1234567890123456789012345678901234567890 abcdef\n"
+                return when {
+                    script.endsWith("refs/pull/*/head") -> "1234567890123456789012345678901234567890 refs/pull/123/head\n" +
+                            "6543516846846146541645265465464654264641 refs/pull/234/head"
+                    script.endsWith("refs/heads/*") -> "fc2b7c527e4401c03bcaf2833739d16e77698ab6 refs/heads/master\n" +
+                            "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/heads/feature-branch"
+                    // TODO extract the requested tag and return it
+                    script.contains("refs/tags/") -> "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/tags/v0.3.0"
+                    script.matches("refs/pull/.*/head".toRegex()) -> "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/pull/123/head"
+                    else -> // Notifier.groovy in zanata-pipeline-library uses this:
+                        return "1234567890123456789012345678901234567890 abcdef\n"
                 }
             }
         }
