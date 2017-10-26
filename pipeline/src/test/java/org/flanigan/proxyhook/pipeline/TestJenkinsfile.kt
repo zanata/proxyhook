@@ -34,7 +34,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
                 // uncomment to use already-downloaded (perhaps modified) copy instead of git:
                 //                .retriever(localSource(LIB_PATH))
                 .targetPath(LIB_PATH)
-                .defaultVersion("ZNTA-2234-tag")
+                .defaultVersion("master")
                 .allowOverride(true)
                 .implicit(false)
                 .build()
