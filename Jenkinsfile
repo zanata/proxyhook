@@ -1,24 +1,52 @@
 #!/usr/bin/env groovy
 
-@Library('zanata-pipeline-library@v0.2.0')
+@Field
+public static final String PROJ_URL = 'https://github.com/zanata/proxyhook'
+
+// Import pipeline library for utility methods & classes:
+// ansicolor(), Notifier, PullRequests, Strings
+@Field
+public static final String PIPELINE_LIBRARY_BRANCH = 'v0.3.0'
+
+// GROOVY-3278:
+//   Using referenced String constant as value of Annotation causes compile error
+@Library('zanata-pipeline-library@v0.3.0')
 import org.zanata.jenkins.Notifier
 import org.zanata.jenkins.PullRequests
+import org.zanata.jenkins.ScmGit
+import static org.zanata.jenkins.Reporting.codecov
 import static org.zanata.jenkins.StackTraces.getStackTrace
 
-
 import groovy.transform.Field
-
 
 // The first milestone step starts tracking concurrent build order
 milestone()
 
-
 PullRequests.ensureJobDescription(env, manager, steps)
+
+@Field
+def pipelineLibraryScmGit
+
+@Field
+def mainScmGit
 
 @Field
 def notify
 // initialiser must be run separately (bindings not available during compilation phase)
-notify = new Notifier(env, steps)
+
+/* Only keep the 10 most recent builds. */
+def projectProperties = [
+  [
+    $class: 'GithubProjectProperty',
+    projectUrlStr: PROJ_URL
+  ],
+  [
+    $class: 'BuildDiscarderProperty',
+    strategy: [$class: 'LogRotator', numToKeepStr: '10']
+  ],
+]
+properties(projectProperties)
+
 
 // Decide whether the build should be tagged and deployed. If the result $tag
 // is non-null, a corresponding git tag $tag has been created. If the build
@@ -43,6 +71,13 @@ timestamps {
   // allocate a node for build+unit tests
   node() {
     echo "running on node ${env.NODE_NAME}"
+    pipelineLibraryScmGit = new ScmGit(env, steps, 'https://github.com/zanata/zanata-pipeline-library')
+    pipelineLibraryScmGit.init(PIPELINE_LIBRARY_BRANCH)
+    mainScmGit = new ScmGit(env, steps, PROJ_URL)
+    mainScmGit.init(env.BRANCH_NAME)
+    notify = new Notifier(env, steps, currentBuild,
+        pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
+    )
     // generate logs in colour
     ansicolor {
       try {
@@ -58,6 +93,7 @@ timestamps {
           sh "git clean -fdx"
         }
         stage('Build') {
+          notify.startBuilding()
           def tag = makeTag()
 
           // TODO run detekt
@@ -82,21 +118,7 @@ timestamps {
             }
 
             // send test coverage data to codecov.io
-            try {
-              withCredentials(
-                  [[$class: 'StringBinding',
-                    credentialsId: 'codecov_proxyhook',
-                    variable: 'CODECOV_TOKEN']]) {
-                // NB the codecov script uses CODECOV_TOKEN
-                sh "curl -s https://codecov.io/bash | bash -s - -K"
-              }
-            } catch (InterruptedException e) {
-              throw e
-            } catch (hudson.AbortException e) {
-              throw e
-            } catch (e) {
-              echo "[WARNING] Ignoring codecov error: $e"
-            }
+            codecov(env, steps, mainScmGit)
 
             if (tag) {
               // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
