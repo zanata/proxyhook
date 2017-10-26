@@ -4,6 +4,5 @@
 *.swp
 build/
 out/
-classes/
 *.jar
 *.keystore

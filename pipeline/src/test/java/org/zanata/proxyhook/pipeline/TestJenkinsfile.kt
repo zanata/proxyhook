@@ -21,7 +21,7 @@ import java.util.function.Function
 class TestJenkinsfile : BasePipelineTestCPS() {
 
     companion object {
-        private val LIB_PATH = "build/pipeline-libs"
+        private val LIB_PATH = "build/tmp/pipeline-libs"
     }
 
     @Before
