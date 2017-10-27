@@ -48,6 +48,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
         helper.registerAllowedMethod("lock", listOf(Map::class.java, Closure::class.java), null)
         helper.registerAllowedMethod("lock", listOf(String::class.java, Closure::class.java), null)
         helper.registerAllowedMethod("milestone", listOf(), null)
+        helper.registerAllowedMethod("readProperties", listOf(Map::class.java), null)
         helper.registerAllowedMethod("readProperties", listOf(String::class.java), null)
         helper.registerAllowedMethod("stash", listOf(Map::class.java), null)
         helper.registerAllowedMethod("timestamps", listOf(Closure::class.java), null)
