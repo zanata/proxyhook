@@ -2,7 +2,6 @@
 .idea/
 *.iml
 *.swp
-target/
 build/
 out/
 classes/

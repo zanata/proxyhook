@@ -1,10 +1,8 @@
 package org.zanata.proxyhook.pipeline
 
 import com.cloudbees.groovy.cps.impl.CpsCallableInvocation
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
 import com.lesfurets.jenkins.unit.cps.BasePipelineTestCPS
-import com.lesfurets.jenkins.unit.global.lib.LibraryConfiguration
 import groovy.lang.Closure
 import org.codehaus.groovy.runtime.MethodClosure
 import org.junit.Before
@@ -23,7 +21,7 @@ import java.util.function.Function
 class TestJenkinsfile : BasePipelineTestCPS() {
 
     companion object {
-        private val LIB_PATH = "target/libs"
+        private val LIB_PATH = "build/pipeline-libs"
     }
 
     @Before
@@ -50,6 +48,8 @@ class TestJenkinsfile : BasePipelineTestCPS() {
         helper.registerAllowedMethod("lock", listOf(Map::class.java, Closure::class.java), null)
         helper.registerAllowedMethod("lock", listOf(String::class.java, Closure::class.java), null)
         helper.registerAllowedMethod("milestone", listOf(), null)
+        helper.registerAllowedMethod("readProperties", listOf(Map::class.java), null)
+        helper.registerAllowedMethod("readProperties", listOf(String::class.java), null)
         helper.registerAllowedMethod("stash", listOf(Map::class.java), null)
         helper.registerAllowedMethod("timestamps", listOf(Closure::class.java), null)
         helper.registerAllowedMethod("unstash", listOf(Map::class.java), null)
@@ -65,13 +65,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
                     }
                     throw RuntimeException("Unmocked invocation")
                 })
-        helper.registerAllowedMethod(method("sh", Map::class.java),
-                Function { args: Map<String, *> ->
-                    if (TRUE == args["returnStatus"]) {
-                        return@Function 0
-                    }
-                    0
-                } as Function<*, *>)
+        helper.registerAllowedMethod(method("sh", Map::class.java), SH)
         // PipelineUnit(withCredentialsInterceptor) can't handle a List<Map>
         helper.registerAllowedMethod("withCredentials",
                 listOf(List::class.java, Closure::class.java),
@@ -86,7 +80,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
         val env = HashMap<String, String>()
         env.put("BUILD_URL", "http://example.com/job/JobName/123")
         env.put("JOB_NAME", "JobName")
-        env.put("BRANCH_NAME", "PR-456")
+        env.put("BRANCH_NAME", "master")
         env.put("BUILD_NUMBER", "123")
         env.put("EXECUTOR_NUMBER", "1")
         env.put("DEFAULT_NODE", "master")
@@ -94,8 +88,14 @@ class TestJenkinsfile : BasePipelineTestCPS() {
 
         // these steps will be passed by reference to library methods
         val steps = HashMap<String, Closure<*>>()
+        steps.put("codecov", Closure.IDENTITY)
         steps.put("hipchatSend", Closure.IDENTITY)
         steps.put("echo", Closure.IDENTITY)
+        steps.put("emailext", Closure.IDENTITY)
+        steps.put("emailextrecipients", Closure.IDENTITY)
+        steps.put("library", Closure.IDENTITY)
+        steps.put("sh", SH)
+        steps.put("step", Closure.IDENTITY)
         // we need this for CPS mode
         MethodClosure.ALLOW_RESOLVE = true
 
@@ -114,7 +114,7 @@ class TestJenkinsfile : BasePipelineTestCPS() {
     fun shouldExecuteWithoutErrors() {
         try {
             // load and execute the Jenkinsfile
-            loadScript("../Jenkinsfile")
+            runScript("../Jenkinsfile")
             printCallStack()
             assertJobStatusSuccess()
             // TODO add assertions about call stack (but not too fragile)
@@ -127,4 +127,33 @@ class TestJenkinsfile : BasePipelineTestCPS() {
         }
     }
 
+}
+
+object SH : Closure<Any>(null) {
+    @Suppress("RedundantVisibilityModifier")
+    public fun doCall(arg: Any): Any {
+        if (arg is String) return 0
+        val args = arg as? Map<*, *> ?: throw Exception("expected a String or a Map of args")
+        if (TRUE == args["returnStdout"]) {
+            val script = args["script"].toString()
+            if (script.endsWith("allocate-jboss-ports")) {
+                return "JBOSS_HTTP_PORT=51081\nSMTP_PORT=34765\n"
+            }
+            if (script.startsWith("git ls-remote")) {
+                // ScmGit.init in zanata-pipeline-library uses these:
+                return when {
+                    script.endsWith("refs/pull/*/head") -> "1234567890123456789012345678901234567890 refs/pull/123/head\n" +
+                            "6543516846846146541645265465464654264641 refs/pull/234/head"
+                    script.endsWith("refs/heads/*") -> "fc2b7c527e4401c03bcaf2833739d16e77698ab6 refs/heads/master\n" +
+                            "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/heads/feature-branch"
+                    // TODO extract the requested tag and return it
+                    script.contains("refs/tags/") -> "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/tags/v0.3.0"
+                    script.matches("refs/pull/.*/head".toRegex()) -> "b0d3e2ff4696f2702f4b4fbac3b59b6cf9a76790 refs/pull/123/head"
+                    else -> // Notifier.groovy in zanata-pipeline-library uses this:
+                        return "1234567890123456789012345678901234567890 abcdef\n"
+                }
+            }
+        }
+        return 0
+    }
 }

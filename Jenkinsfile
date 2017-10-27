@@ -1,24 +1,52 @@
 #!/usr/bin/env groovy
 
-@Library('zanata-pipeline-library@master')
+@Field
+public static final String PROJ_URL = 'https://github.com/zanata/proxyhook'
+
+// Import pipeline library for utility methods & classes:
+// ansicolor(), Notifier, PullRequests, Strings
+@Field
+public static final String PIPELINE_LIBRARY_BRANCH = 'v0.3.0'
+
+// GROOVY-3278:
+//   Using referenced String constant as value of Annotation causes compile error
+@Library('zanata-pipeline-library@v0.3.0')
 import org.zanata.jenkins.Notifier
 import org.zanata.jenkins.PullRequests
+import org.zanata.jenkins.ScmGit
+import static org.zanata.jenkins.Reporting.codecov
 import static org.zanata.jenkins.StackTraces.getStackTrace
 
-
 import groovy.transform.Field
-
 
 // The first milestone step starts tracking concurrent build order
 milestone()
 
-
 PullRequests.ensureJobDescription(env, manager, steps)
+
+@Field
+def pipelineLibraryScmGit
+
+@Field
+def mainScmGit
 
 @Field
 def notify
 // initialiser must be run separately (bindings not available during compilation phase)
-notify = new Notifier(env, steps)
+
+/* Only keep the 10 most recent builds. */
+def projectProperties = [
+  [
+    $class: 'GithubProjectProperty',
+    projectUrlStr: PROJ_URL
+  ],
+  [
+    $class: 'BuildDiscarderProperty',
+    strategy: [$class: 'LogRotator', numToKeepStr: '10']
+  ],
+]
+properties(projectProperties)
+
 
 // Decide whether the build should be tagged and deployed. If the result $tag
 // is non-null, a corresponding git tag $tag has been created. If the build
@@ -28,7 +56,7 @@ notify = new Notifier(env, steps)
 String makeTag() {
   if (env.BRANCH_NAME == 'master') {
     sh './gradlew setVersionFromBuild'
-    def ver = readProperties('gradle.properties')?.version
+    def ver = readProperties(file: 'gradle.properties')?.version
     if (ver == null) return null
     def tag = 'v' + ver
     sh "git commit gradle.properties -m 'Update version for $ver' && git tag $tag"
@@ -43,6 +71,13 @@ timestamps {
   // allocate a node for build+unit tests
   node() {
     echo "running on node ${env.NODE_NAME}"
+    pipelineLibraryScmGit = new ScmGit(env, steps, 'https://github.com/zanata/zanata-pipeline-library')
+    pipelineLibraryScmGit.init(PIPELINE_LIBRARY_BRANCH)
+    mainScmGit = new ScmGit(env, steps, PROJ_URL)
+    mainScmGit.init(env.BRANCH_NAME)
+    notify = new Notifier(env, steps, currentBuild,
+        pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
+    )
     // generate logs in colour
     ansicolor {
       try {
@@ -57,8 +92,10 @@ timestamps {
           // Clean the workspace
           sh "git clean -fdx"
         }
+        def tag = null
         stage('Build') {
-          def tag = makeTag()
+          notify.startBuilding()
+          tag = makeTag()
 
           // TODO run detekt
           sh """./gradlew clean build shadowJar jacocoTestReport
@@ -71,7 +108,7 @@ timestamps {
           junit(testResults: '**/build/test-results/*.xml')
           notify.testResults("UNIT", currentBuild.result)
 
-          if (currentBuild.result in ['SUCCESS', null]) {
+          if (isBuildResultSuccess()) {
             // parse Jacoco test coverage
             step([$class: 'JacocoPublisher'])
 
@@ -82,32 +119,21 @@ timestamps {
             }
 
             // send test coverage data to codecov.io
-            try {
-              withCredentials(
-                  [[$class: 'StringBinding',
-                    credentialsId: 'codecov_proxyhook',
-                    variable: 'CODECOV_TOKEN']]) {
-                // NB the codecov script uses CODECOV_TOKEN
-                sh "curl -s https://codecov.io/bash | bash -s - -K"
-              }
-            } catch (InterruptedException e) {
-              throw e
-            } catch (hudson.AbortException e) {
-              throw e
-            } catch (e) {
-              echo "[WARNING] Ignoring codecov error: $e"
-            }
-
-            if (tag) {
-              // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
-              sshagent(['zanata-jenkins']) {
-                def sshRepo = "git@github.com:zanata/proxyhook.git"
-                // TODO remove fetch, activate push
-                sh "git -c core.askpass=true fetch $sshRepo"
+            codecov(env, steps, mainScmGit)
+          }
+        }
+        stage('Deploy') {
+          if (tag && isBuildResultSuccess()) {
+            // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
+            sshagent(['zanata-jenkins']) {
+              def sshRepo = "git@github.com:zanata/proxyhook.git"
+              // TODO remove fetch, activate push
+              sh "git -c core.askpass=true fetch $sshRepo"
 //                sh "git -c core.askpass=true push $sshRepo $tag"
-              }
-
-              // deploy client
+            }
+            // TODO deploy binaries, docker images
+/*
+              // TODO deploy client
               if (env.PROXYHOOK_CLIENT_HOME && env.PROXYHOOK_SERVER) {
                 // deploy new version of client
                 sh "cp client/client*-fat.jar ${env.PROXYHOOK_CLIENT_HOME}/proxyhook-client-fat.jar"
@@ -116,7 +142,7 @@ timestamps {
                 sh "$JENKINS_HOME/init.groovy.d/proxyhook_client.groovy"
               }
 
-              // deploy server
+              // TODO deploy server
               sh "./gradlew :server:tarball -x clean -x shadowJar"
               if (env.PROXYHOOK_NAMESPACE && env.PROXYHOOK_APP) {
                 // deploy new version of server
@@ -134,12 +160,12 @@ timestamps {
                 }
               }
             }
-            notify.successful()
+*/
           }
-
-          // Reduce workspace size
-          sh "git clean -fdx"
         }
+        // Reduce workspace size
+        sh "git clean -fdx"
+        notify.successful()
       } catch (e) {
         notify.failed()
         currentBuild.result = 'FAILURE'
@@ -147,4 +173,8 @@ timestamps {
       }
     }
   }
+}
+
+private boolean isBuildResultSuccess() {
+  currentBuild.result in ['SUCCESS', null]
 }
