@@ -56,7 +56,7 @@ properties(projectProperties)
 String makeTag() {
   if (env.BRANCH_NAME == 'master') {
     sh './gradlew setVersionFromBuild'
-    def ver = readProperties('gradle.properties')?.version
+    def ver = readProperties(file: 'gradle.properties')?.version
     if (ver == null) return null
     def tag = 'v' + ver
     sh "git commit gradle.properties -m 'Update version for $ver' && git tag $tag"
