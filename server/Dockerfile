@@ -7,8 +7,6 @@ WORKDIR /app/
 
 EXPOSE 8080
 
-USER 64738
-
 # NB must use the exec form of ENTRYPOINT if you want to add arguments with CMD
 # https://docs.docker.com/engine/reference/builder/#exec-form-entrypoint-example
 

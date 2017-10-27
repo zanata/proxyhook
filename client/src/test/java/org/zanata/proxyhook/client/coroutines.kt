@@ -1,4 +1,4 @@
-package org.flanigan.proxyhook.client
+package org.zanata.proxyhook.client
 
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future

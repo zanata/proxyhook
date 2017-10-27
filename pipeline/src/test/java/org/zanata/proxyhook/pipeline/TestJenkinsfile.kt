@@ -1,4 +1,4 @@
-package org.flanigan.proxyhook.pipeline
+package org.zanata.proxyhook.pipeline
 
 import com.cloudbees.groovy.cps.impl.CpsCallableInvocation
 import com.google.common.collect.ImmutableMap

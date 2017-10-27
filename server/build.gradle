@@ -9,7 +9,7 @@ dependencies {
 }
 
 mainClassName = 'io.vertx.core.Launcher'
-def mainVerticleName = 'org.flanigan.proxyhook.server.ProxyHookServer'
+def mainVerticleName = 'org.zanata.proxyhook.server.ProxyHookServer'
 
 // Vert.x watches for file changes in all subdirectories
 // of src/ but only for files with .kt extension
@@ -23,7 +23,7 @@ task runMain(type: JavaExec)
 
 runMain {
     classpath = sourceSets.main.runtimeClasspath
-    main = 'org.flanigan.proxyhook.server.HashPassword'
+    main = 'org.zanata.proxyhook.server.HashPassword'
     args = []
 }
 

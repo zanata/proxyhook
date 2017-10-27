@@ -6,13 +6,13 @@ plugins {
 dependencies {
     compile project(':common')
     testCompile project(':server')
-    testCompile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16'
+    testCompile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.18'
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
 }
 
 mainClassName = 'io.vertx.core.Launcher'
-def mainVerticleName = 'org.flanigan.proxyhook.client.ProxyHookClient'
+def mainVerticleName = 'org.zanata.proxyhook.client.ProxyHookClient'
 
 // enable debugger on a random port
 applicationDefaultJvmArgs = ['-Xdebug', '-Xrunjdwp:transport=dt_socket,address=0,server=y,suspend=n', '-Dsun.net.inetaddr.ttl=0', '-Dsun.net.inetaddr.negative.ttl=0']
