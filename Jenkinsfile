@@ -92,9 +92,10 @@ timestamps {
           // Clean the workspace
           sh "git clean -fdx"
         }
+        def tag = null
         stage('Build') {
           notify.startBuilding()
-          def tag = makeTag()
+          tag = makeTag()
 
           // TODO run detekt
           sh """./gradlew clean build shadowJar jacocoTestReport
@@ -107,7 +108,7 @@ timestamps {
           junit(testResults: '**/build/test-results/*.xml')
           notify.testResults("UNIT", currentBuild.result)
 
-          if (currentBuild.result in ['SUCCESS', null]) {
+          if (isBuildResultSuccess()) {
             // parse Jacoco test coverage
             step([$class: 'JacocoPublisher'])
 
@@ -119,17 +120,20 @@ timestamps {
 
             // send test coverage data to codecov.io
             codecov(env, steps, mainScmGit)
-
-            if (tag) {
-              // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
-              sshagent(['zanata-jenkins']) {
-                def sshRepo = "git@github.com:zanata/proxyhook.git"
-                // TODO remove fetch, activate push
-                sh "git -c core.askpass=true fetch $sshRepo"
+          }
+        }
+        stage('Deploy') {
+          if (tag && isBuildResultSuccess()) {
+            // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
+            sshagent(['zanata-jenkins']) {
+              def sshRepo = "git@github.com:zanata/proxyhook.git"
+              // TODO remove fetch, activate push
+              sh "git -c core.askpass=true fetch $sshRepo"
 //                sh "git -c core.askpass=true push $sshRepo $tag"
-              }
-
-              // deploy client
+            }
+            // TODO deploy binaries, docker images
+/*
+              // TODO deploy client
               if (env.PROXYHOOK_CLIENT_HOME && env.PROXYHOOK_SERVER) {
                 // deploy new version of client
                 sh "cp client/client*-fat.jar ${env.PROXYHOOK_CLIENT_HOME}/proxyhook-client-fat.jar"
@@ -138,7 +142,7 @@ timestamps {
                 sh "$JENKINS_HOME/init.groovy.d/proxyhook_client.groovy"
               }
 
-              // deploy server
+              // TODO deploy server
               sh "./gradlew :server:tarball -x clean -x shadowJar"
               if (env.PROXYHOOK_NAMESPACE && env.PROXYHOOK_APP) {
                 // deploy new version of server
@@ -156,12 +160,12 @@ timestamps {
                 }
               }
             }
-            notify.successful()
+*/
           }
-
-          // Reduce workspace size
-          sh "git clean -fdx"
         }
+        // Reduce workspace size
+        sh "git clean -fdx"
+        notify.successful()
       } catch (e) {
         notify.failed()
         currentBuild.result = 'FAILURE'
@@ -169,4 +173,8 @@ timestamps {
       }
     }
   }
+}
+
+private boolean isBuildResultSuccess() {
+  currentBuild.result in ['SUCCESS', null]
 }
