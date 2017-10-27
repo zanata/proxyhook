@@ -1,12 +1,12 @@
 package org.zanata.proxyhook.client
 
-import io.vertx.core.AsyncResult
 import io.vertx.core.Future
-import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import io.vertx.core.http.HttpServer
 import io.vertx.core.logging.LoggerFactory
 import io.vertx.ext.unit.junit.VertxUnitRunner
+import io.vertx.kotlin.coroutines.await
+import io.vertx.kotlin.coroutines.awaitResult
 import kotlinx.coroutines.experimental.runBlocking
 import org.asynchttpclient.DefaultAsyncHttpClient
 import org.junit.After
@@ -114,14 +114,14 @@ class IntegrationTest {
 
     private suspend fun startServer(prefix: String): Pair<Future<String>, Future<Int>> {
         val actualPort = Future.future<Int>()
-        val deploymentId = futureVx<String> { it: Handler<AsyncResult<String>> ->
-            server.deployVerticle(ProxyHookServer(port = 0, prefix = prefix, actualPort = actualPort), it)
+        val deploymentId = futureResult<String> { handler ->
+            server.deployVerticle(ProxyHookServer(port = 0, prefix = prefix, actualPort = actualPort), handler)
         }
         return deploymentId to actualPort
     }
 
     private fun createWebhookReceiver(testFinished: CompletableFuture<Unit>): Future<Int> = future {
-        val httpServer: HttpServer = vx {
+        val httpServer: HttpServer = awaitResult { handler ->
             webhook.createHttpServer().requestHandler { req ->
                 req.response().statusCode = 200
                 req.response().end()
@@ -135,7 +135,7 @@ class IntegrationTest {
                         testFinished.completeExceptionally(AssertionError("wrong payload: $payload"))
                     }
                 }
-            }.listen(0, it) // listen on random port
+            }.listen(0, handler) // listen on random port
         }
         val actualPort = httpServer.actualPort()
         log.info("webhook receiver ready on port $actualPort")

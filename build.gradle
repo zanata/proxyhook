@@ -25,6 +25,7 @@ subprojects {
     compile 'io.vertx:vertx-core:3.5.0'
     compile 'io.vertx:vertx-web:3.5.0'
     testCompile 'io.vertx:vertx-unit:3.5.0'
+    testCompile 'io.vertx:vertx-lang-kotlin-coroutines:3.5.0'
     testCompile 'junit:junit:4.12'
     testCompile 'net.wuerl.kotlin:assertj-core-kotlin:0.2.1'
   }
