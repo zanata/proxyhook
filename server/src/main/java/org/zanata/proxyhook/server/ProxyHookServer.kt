@@ -33,12 +33,13 @@ import io.vertx.core.http.HttpServerRequest
 import io.vertx.core.http.ServerWebSocket
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
+import io.vertx.core.shareddata.AsyncMap
+import io.vertx.core.shareddata.Counter
 import io.vertx.core.shareddata.LocalMap
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.handler.ErrorHandler
-import org.zanata.proxyhook.common.*
 import org.zanata.proxyhook.common.Constants.EVENT_ID_HEADERS
 import org.zanata.proxyhook.common.Constants.MAX_BODY_SIZE
 import org.zanata.proxyhook.common.Constants.MAX_FRAME_SIZE
@@ -82,9 +83,9 @@ import java.net.UnknownHostException
  */
 class ProxyHookServer(val port: Int? = null, val prefix: String = getenv("PROXYHOOK_PREFIX") ?: "", var actualPort: Future<Int>? = null) : AbstractVerticle() {
 
-    // TODO clustering: should use getClusterWideMap and getCounter
-    val connections: LocalMap<String, Boolean> by lazy {
-        vertx.sharedData().getLocalMap<String, Boolean>("connections")
+    // map of websockets which are connected directly to this verticle (not via clustering)
+    val localConnections: LocalMap<String, Boolean> by lazy {
+        vertx.sharedData().getLocalMap<String, Boolean>("localConnections")
     }
     val eventBus: EventBus get() = vertx.eventBus()
 
@@ -96,138 +97,247 @@ class ProxyHookServer(val port: Int? = null, val prefix: String = getenv("PROXYH
         } else {
             log.warn("{0} is not set; authentication is disabled", PROXYHOOK_PASSHASH)
         }
-        val host = System.getProperty("http.address", "127.0.0.1")
+        val listenHost = System.getProperty("http.address", "127.0.0.1")
         val listenPort: Int = port ?: Integer.getInteger("http.port", 8080)
-        log.info("Starting webhook/websocket server on $host:$listenPort")
+        log.info("Starting webhook/websocket server on $listenHost:$listenPort")
 
-        val options = HttpServerOptions()
-                // 60s timeout based on pings every 50s
-                .setIdleTimeout(60)
-                .setMaxWebsocketFrameSize(MAX_FRAME_SIZE)
-                .setPort(listenPort)
-                .setHost(host)
-        val server = vertx.createHttpServer(options)
-        // a set of textHandlerIds for connected websockets
+        val sharedData = vertx.sharedData()
 
-        vertx.setPeriodic(50_000) {
-            // TODO clustering: should iterate through websockets of this verticle only (eg a local HashMap?)
-            connections.keys.forEach { connection ->
+        sharedData.getCounter("connectionCount", { countRes ->
+            if (countRes.succeeded()) {
+                // a counter of websocket connections across the vert.x cluster
+                val connectionCount: Counter = countRes.result()
+                sharedData.getClusterWideMap<String, Boolean>("connections", { connsRes ->
+                    if (connsRes.succeeded()) {
+                        // a map of websocket connections across the vert.x cluster
+                        val connections: AsyncMap<String, Boolean> = connsRes.result()
 
-                // this is probably the correct way (ping frame triggers pong, closes websocket if no data received before idleTimeout in TCPSSLOptions):
-                //                WebSocketFrameImpl frame = new WebSocketFrameImpl(FrameType.PING, io.netty.buffer.Unpooled.copyLong(System.currentTimeMillis()));
-                //                webSocket.writeFrame(frame);
+                        fun readyHandler(context: RoutingContext) {
+                            connectionCount.get { res ->
+                                if (res.succeeded()) {
+                                    val count: Long = res.result()
+                                    context.response()
+                                            // if there are no connections, webhooks won't be delivered, thus HTTP_SERVICE_UNAVAILABLE
+                                            .setStatusCode(if (count == 0L) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
+                                            .end(APP_NAME + " (" + describe(count) + ")")
+                                } else {
+                                    context.response().setStatusCode(HTTP_INTERNAL_SERVER_ERROR).end()
+                                }
+                            }
+                        }
 
-                val obj = JsonObject()
-                obj.put(TYPE, PING)
-                obj.put(PING_ID, System.currentTimeMillis().toString())
-                eventBus.send(connection, obj.encode())
-            }
-        }
+                        fun rootHandler(context: RoutingContext) {
+                            connectionCount.get { res ->
+                                if (res.succeeded()) {
+                                    val count: Long = res.result()
+                                    context.response().setStatusCode(HTTP_OK).end(APP_NAME + " (" + describe(count) + ")")
+                                } else {
+                                    context.response().setStatusCode(HTTP_INTERNAL_SERVER_ERROR).end()
+                                }
+                            }
+                        }
 
-        val router = Router.router(vertx)
-        router.exceptionHandler { t -> log.error("Unhandled exception", t) }
-        router.route()
-                .handler(BodyHandler.create().setBodyLimit(MAX_BODY_SIZE.toLong()))
-                //                .handler(LoggerHandler.create())
-                .failureHandler(ErrorHandler.create())
-        // we need to respond to GET / so that health checks will work:
-        router.get("$prefix/").handler { routingContext -> routingContext.response().setStatusCode(HTTP_OK).end(APP_NAME + " (" + describe(connections.size) + ")") }
-        // see https://github.com/vert-x3/vertx-health-check if we need more features
-        router.get("$prefix/ready").handler(this::readyHandler)
-        router.post("$prefix/$PATH_WEBHOOK").handler(this::webhookHandler)
-        server.requestHandler({ router.accept(it) })
-        server.websocketHandler { webSocket: ServerWebSocket ->
-            if (webSocket.path() != "$prefix/$PATH_WEBSOCKET") {
-                log.warn("wrong path for websocket connection: {0}", webSocket.path())
-                webSocket.reject()
-                return@websocketHandler
-            }
-            handleListen(webSocket)
-        }
-        server.listen { startupResult ->
-            if (startupResult.failed()) {
-                actualPort?.fail(startupResult.cause())
-                throw StartupException(startupResult.cause())
+                        fun webhookHandler(context: RoutingContext) {
+                            log.info("handling POST request")
+                            val req = context.request()
+                            val headers = req.headers()
+                            EVENT_ID_HEADERS
+                                    .filter { headers.contains(it) }
+                                    .forEach { log.info("{0}: {1}", it, headers.getAll(it)) }
+                            connections.keys { res ->
+                                if (res.succeeded()) {
+                                    val listeners = res.result()
+                                    log.info("handling POST for {0} listeners", listeners.size)
+                                    val statusCode: Int
+                                    if (!listeners.isEmpty()) {
+                                        val body = context.body
+                                        val msgString = encodeWebhook(req, body)
+                                        for (connection in listeners) {
+                                            eventBus.send(connection, msgString)
+                                        }
+                                        log.info("Webhook " + req.path() + " received " + body.length() + " bytes. Forwarded to " + describe(listeners.size) + ".")
+                                        statusCode = HTTP_OK
+                                    } else {
+                                        // nothing to do
+                                        log.warn("Webhook " + req.path() + " received, but there are no listeners connected.")
+
+                                        // returning an error should make it easier for client to redeliver later (when there is a listener)
+                                        statusCode = HTTP_SERVICE_UNAVAILABLE
+                                    }
+                                    context.response()
+                                            .setStatusCode(statusCode)
+                                            .end("Received by " + APP_NAME + " (" + describe(listeners.size) + ")")
+                                } else {
+                                    context.response().setStatusCode(HTTP_INTERNAL_SERVER_ERROR).end()
+                                }
+                            }
+
+                        }
+
+                        fun registerWebsocket(webSocket: ServerWebSocket) {
+                            // TODO enhancement: register specific webhook path using webSocket.path() or webSocket.query()
+                            val id = webSocket.textHandlerID()
+                            val clientIP = getClientIP(webSocket)
+                            log.info("Adding connection. ID: $id IP: $clientIP")
+                            localConnections.put(id, true)
+                            connections.put(id, true, { res ->
+                                if (res.succeeded()) {
+                                    log.info("Connection registered with cluster")
+                                } else {
+                                    log.error("error", res.cause())
+                                }
+                            })
+                            connectionCount.incrementAndGet { res ->
+                                if (res.succeeded()) {
+                                    log.info("New connection counted: cluster has {0} connections", res.result())
+                                } else {
+                                    log.error("error", res.cause())
+                                }
+                            }
+                            log.info("Total local connections: {0}", localConnections.size)
+                            webSocket.closeHandler {
+                                log.info("Connection closed. ID: {0} IP: {1}", id, clientIP)
+                                localConnections.remove(id)
+                                connections.remove(id, { res ->
+                                    if (res.succeeded()) {
+                                        log.info("Connection removed from cluster")
+                                    } else {
+                                        log.error("error", res.cause())
+                                    }
+                                })
+                                connectionCount.decrementAndGet() { res ->
+                                    if (res.succeeded()) {
+                                        log.info("Closed connection counted: cluster has {0} connections", res.result())
+                                    } else {
+                                        log.error("error", res.cause())
+                                    }
+                                }
+                                log.info("Total local connections: {0}", localConnections.size)
+                            }
+                            webSocket.exceptionHandler { e ->
+                                log.warn("Connection error. ID: {0} IP: {1}", e, id, clientIP)
+                                localConnections.remove(id)
+                                connections.remove(id, { res ->
+                                    if (res.succeeded()) {
+                                        log.info("Broken connection removed from cluster")
+                                    } else {
+                                        log.error("error", res.cause())
+                                    }
+                                })
+                                connectionCount.decrementAndGet() { res ->
+                                    if (res.succeeded()) {
+                                        log.info("Broken connection counted: cluster has {0} connections", res.result())
+                                    } else {
+                                        log.error("error", res.cause())
+                                    }
+                                }
+                                log.info("Total local connections: {0}", localConnections.size)
+                            }
+                        }
+
+                        fun handleLogin(msg: JsonObject, webSocket: ServerWebSocket) {
+                            val password = msg.getString(PASSWORD)
+                            if (passhash == null) {
+                                log.info("unverified websocket connection")
+                                val obj = JsonObject()
+                                obj.put(TYPE, SUCCESS)
+                                webSocket.writeTextMessage(obj.encode())
+                                registerWebsocket(webSocket)
+                            } else if (BCrypt.checkpw(password, passhash)) {
+                                log.info("password accepted")
+                                val obj = JsonObject()
+                                obj.put(TYPE, SUCCESS)
+                                webSocket.writeTextMessage(obj.encode())
+                                registerWebsocket(webSocket)
+                            } else {
+                                log.warn("password rejected")
+                                val obj = JsonObject()
+                                obj.put(TYPE, FAILED)
+                                webSocket.writeTextMessage(obj.encode())
+                                webSocket.close()
+                            }
+                        }
+
+                        fun handleListen(webSocket: ServerWebSocket) {
+                            webSocket.handler { buffer: Buffer ->
+                                val msg = buffer.toJsonObject()
+                                val messageType = MessageType.valueOf(msg.getString(TYPE))
+                                when (messageType) {
+                                    LOGIN -> handleLogin(msg, webSocket)
+                                    PING -> handlePing(msg, webSocket)
+                                    PONG -> handlePong(msg)
+                                    else -> handleUnknownMessage(msg, webSocket)
+                                }
+                            }
+                        }
+
+                        val options = HttpServerOptions().apply {
+                            // 60s timeout based on pings every 50s
+                            idleTimeout = 60
+                            maxWebsocketFrameSize = MAX_FRAME_SIZE
+                            host = listenHost
+                            port = listenPort
+                        }
+                        val server = vertx.createHttpServer(options)
+                        // a set of textHandlerIds for connected websockets
+
+                        vertx.setPeriodic(50_000) {
+                            // in a cluster, we should only ping websockets connected to this verticle directly
+                            localConnections.keys.forEach { connection ->
+
+                                // this is probably the correct way (ping frame triggers pong, closes websocket if no data received before idleTimeout in TCPSSLOptions):
+                                // WebSocketFrameImpl frame = new WebSocketFrameImpl(FrameType.PING, io.netty.buffer.Unpooled.copyLong(System.currentTimeMillis()));
+                                // webSocket.writeFrame(frame);
+
+                                val obj = JsonObject()
+                                obj.put(TYPE, PING)
+                                obj.put(PING_ID, System.currentTimeMillis().toString())
+                                eventBus.send(connection, obj.encode())
+                            }
+                        }
+
+                        val router = Router.router(vertx)
+                        router.exceptionHandler { t -> log.error("Unhandled exception", t) }
+                        router.route()
+                                .handler(BodyHandler.create().setBodyLimit(MAX_BODY_SIZE.toLong()))
+                                //                .handler(LoggerHandler.create())
+                                .failureHandler(ErrorHandler.create())
+                        // we need to respond to GET / so that health checks will work:
+                        router.get("$prefix/").handler(::rootHandler)
+                        // see https://github.com/vert-x3/vertx-health-check if we need more features
+                        router.get("$prefix/ready").handler(::readyHandler)
+                        router.post("$prefix/$PATH_WEBHOOK").handler(::webhookHandler)
+                        server.requestHandler({ router.accept(it) })
+                        server.websocketHandler { webSocket: ServerWebSocket ->
+                            if (webSocket.path() != "$prefix/$PATH_WEBSOCKET") {
+                                log.warn("wrong path for websocket connection: {0}", webSocket.path())
+                                webSocket.reject()
+                                return@websocketHandler
+                            }
+                            handleListen(webSocket)
+                        }
+                        server.listen { startupResult ->
+                            if (startupResult.failed()) {
+                                actualPort?.fail(startupResult.cause())
+                                throw StartupException(startupResult.cause())
+                            } else {
+                                log.info("Started server on port ${server.actualPort()}")
+                                logEndPoints(server.actualPort())
+                                actualPort?.complete(server.actualPort())
+                            }
+                        }
+                    } else {
+                        // Something went wrong!
+                        actualPort?.fail(connsRes.cause())
+                    }
+                })
             } else {
-                log.info("Started server on port ${server.actualPort()}")
-                logEndPoints(server.actualPort())
-                actualPort?.complete(server.actualPort())
+                // Something went wrong!
+                actualPort?.fail(countRes.cause())
             }
-        }
+        })
     }
 
-    private fun readyHandler(context: RoutingContext) {
-        context.response()
-                // if there are no connections, webhooks won't be delivered, thus HTTP_SERVICE_UNAVAILABLE
-                .setStatusCode(if (connections.isEmpty()) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
-                .end(APP_NAME + " (" + describe(connections.size) + ")")
-    }
-
-    private fun webhookHandler(context: RoutingContext) {
-        log.info("handling POST request")
-        val req = context.request()
-        val headers = req.headers()
-        EVENT_ID_HEADERS
-                .filter { headers.contains(it) }
-                .forEach { log.info("{0}: {1}", it, headers.getAll(it)) }
-        val statusCode: Int
-        val listeners = connections.keys
-        log.info("handling POST for {0} listeners", listeners.size)
-        if (!listeners.isEmpty()) {
-            val body = context.body
-            val msgString = encodeWebhook(req, body)
-            for (connection in listeners) {
-                eventBus.send(connection, msgString)
-            }
-            log.info("Webhook " + req.path() + " received " + body.length() + " bytes. Forwarded to " + describe(listeners.size) + ".")
-            statusCode = HTTP_OK
-        } else {
-            // nothing to do
-            log.warn("Webhook " + req.path() + " received, but there are no listeners connected.")
-
-            // returning an error should make it easier for client to redeliver later (when there is a listener)
-            statusCode = HTTP_SERVICE_UNAVAILABLE
-        }
-        context.response()
-                .setStatusCode(statusCode)
-                .end("Received by " + APP_NAME + " (" + describe(listeners.size) + ")")
-    }
-
-    private fun handleListen(webSocket: ServerWebSocket) {
-        webSocket.handler { buffer: Buffer ->
-            val msg = buffer.toJsonObject()
-            val messageType = MessageType.valueOf(msg.getString(TYPE))
-            when (messageType) {
-                LOGIN -> handleLogin(msg, webSocket)
-                PING -> handlePing(msg, webSocket)
-                PONG -> handlePong(msg)
-                else -> handleUnknownMessage(msg, webSocket)
-            }
-        }
-    }
-
-    private fun handleLogin(msg: JsonObject, webSocket: ServerWebSocket) {
-        val password = msg.getString(PASSWORD)
-        if (passhash == null) {
-            log.info("unverified websocket connection")
-            val obj = JsonObject()
-            obj.put(TYPE, SUCCESS)
-            webSocket.writeTextMessage(obj.encode())
-            registerWebsocket(connections, webSocket)
-        } else if (BCrypt.checkpw(password, passhash)) {
-            log.info("password accepted")
-            val obj = JsonObject()
-            obj.put(TYPE, SUCCESS)
-            webSocket.writeTextMessage(obj.encode())
-            registerWebsocket(connections, webSocket)
-        } else {
-            log.warn("password rejected")
-            val obj = JsonObject()
-            obj.put(TYPE, FAILED)
-            webSocket.writeTextMessage(obj.encode())
-            webSocket.close()
-        }
-    }
 
     private fun handlePing(msg: JsonObject, webSocket: ServerWebSocket) {
         val pingId = msg.getString(PING_ID)
@@ -272,26 +382,6 @@ class ProxyHookServer(val port: Int? = null, val prefix: String = getenv("PROXYH
         } catch (e: UnknownHostException) {
             log.warn("Unable to find hostname", e)
             "localhost"
-        }
-    }
-
-    private fun registerWebsocket(connections: LocalMap<String, Boolean>,
-                                  webSocket: ServerWebSocket) {
-        // TODO enhancement: register specific webhook path using webSocket.path() or webSocket.query()
-        val id = webSocket.textHandlerID()
-        val clientIP = getClientIP(webSocket)
-        log.info("Adding connection. ID: $id IP: $clientIP")
-        connections.put(id, true)
-        log.info("Total connections: {0}", connections.size)
-        webSocket.closeHandler {
-            log.info("Connection closed. ID: {0} IP: {1}", id, clientIP)
-            connections.remove(id)
-            log.info("Total connections: {0}", connections.size)
-        }
-        webSocket.exceptionHandler { e ->
-            log.warn("Connection error. ID: {0} IP: {1}", e, id, clientIP)
-            connections.remove(id)
-            log.info("Total connections: {0}", connections.size)
         }
     }
 
@@ -351,14 +441,16 @@ class ProxyHookServer(val port: Int? = null, val prefix: String = getenv("PROXYH
         // HTTP status codes
         private val HTTP_OK = 200
         //    private static final int HTTP_NO_CONTENT = 204;
-        //    private static final int HTTP_INTERNAL_SERVER_ERROR = 500;
+        private val HTTP_INTERNAL_SERVER_ERROR = 500;
         //    private static final int HTTP_NOT_IMPLEMENTED = 501;
         //    private static final int HTTP_BAD_GATEWAY = 502;
         private val HTTP_SERVICE_UNAVAILABLE = 503
         //    private static final int HTTP_GATEWAY_TIMEOUT = 504;
 
-        internal fun describe(size: Int): String {
-            if (size == 1) {
+        internal fun describe(size: Int): String = describe(size.toLong())
+
+        internal fun describe(size: Long): String {
+            if (size == 1L) {
                 return "1 listener"
             } else {
                 return "" + size + " listeners"

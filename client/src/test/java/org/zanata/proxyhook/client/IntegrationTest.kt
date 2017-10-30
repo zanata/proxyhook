@@ -2,6 +2,7 @@ package org.zanata.proxyhook.client
 
 import io.vertx.core.Future
 import io.vertx.core.Vertx
+import io.vertx.core.VertxOptions
 import io.vertx.core.http.HttpServer
 import io.vertx.core.logging.LoggerFactory
 import io.vertx.kotlin.coroutines.await
@@ -43,20 +44,30 @@ class IntegrationTest {
     private lateinit var proxyClient: ProxyClient
 
     @Before
-    fun before() {
-        server = Vertx.vertx()
+    fun before() = runBlocking {
+        val serverOpts = VertxOptions().apply {
+            clusterManager = io.vertx.test.fakecluster.FakeClusterManager()
+//            clusterManager = io.vertx.ext.cluster.infinispan.InfinispanClusterManager()
+            clusterHost = "localhost"
+            clusterPort = 0
+            isClustered = true
+        }
+        server = awaitResult {
+            Vertx.clusteredVertx(serverOpts, it)
+        }
         webhook = Vertx.vertx()
         client = Vertx.vertx()
     }
 
     @After
-    fun after() {
+    fun after() = runBlocking {
         // to minimise shutdown errors:
         // 1. we want the client to stop delivering before the webhook receiver stops
         // 2. we want the client to disconnect from server before server stops
-        client.close()
-        webhook.close()
-        server.close()
+        awaitResult<Void> { client.close(it) }
+        awaitResult<Void> { webhook.close(it) }
+        awaitResult<Void> { server.close(it) }
+        Unit
     }
 
     @Test
@@ -76,13 +87,6 @@ class IntegrationTest {
     fun subPathDeployment() {
         deliverProxiedWebhook(prefix = "/proxyhook")
         proxyClient.verifyZeroInteractions()
-    }
-
-    @Test
-    fun subPathDeploymentWithProxy() {
-        deliverProxiedWebhook(prefix = "/proxyhook", internalHttpProxy = proxyRule.httpPort)
-//        proxyClient.dumpToLogAsJSON(request())
-        proxyClient.verify(request(), once())
     }
 
     private fun ProxyClient.verifyZeroInteractions() {

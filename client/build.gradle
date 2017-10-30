@@ -3,6 +3,11 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '1.2.3'
 }
 
+sourceSets {
+    // Just for testSourcesCompile (see below)
+    testSources
+}
+
 dependencies {
     compile project(':common')
     testCompile project(':server')
@@ -10,6 +15,19 @@ dependencies {
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
     testCompile 'org.mock-server:mockserver-netty:3.11'
+    // for FakeClusterManager: https://github.com/eclipse/vert.x/issues/2191
+    testCompile 'io.vertx:vertx-core:3.5.0:tests'
+    // Enabling this should cause the IDE to download the source for
+    // FakeClusterManager. (You'll still have to select Choose Sources on
+    // FakeClusterManager.class, then browse to the test-sources jar in a
+    // nearby directory.)
+//    testSourcesCompile 'io.vertx:vertx-core:3.5.0:test-sources'
+
+//    compile 'io.vertx:vertx-hazelcast:3.5.0'
+//    compile 'io.vertx:vertx-infinispan:3.5.0'
+//    // http://vertx.io/docs/vertx-infinispan/java/#_configuring_for_kubernetes_or_openshift_3
+//    compile 'org.infinispan:infinispan-cloud:9.1.2.Final'
+//    compile 'org.jgroups.kubernetes:jgroups-kubernetes:1.0.3.Final'
 }
 
 mainClassName = 'io.vertx.core.Launcher'

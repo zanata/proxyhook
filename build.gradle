@@ -52,6 +52,11 @@ subprojects {
     }
   }
 
+  configurations {
+    all*.exclude group: 'xerces', module: 'xerces'
+    all*.exclude group: 'xerces', module: 'xercesImpl'
+  }
+
 }
 
 task('setVersionFromBuild') << {
