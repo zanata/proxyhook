@@ -34,7 +34,7 @@ import io.vertx.core.http.impl.FrameType
 import io.vertx.core.http.impl.ws.WebSocketFrameImpl
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
-import org.zanata.proxyhook.common.*
+import io.vertx.core.net.ProxyOptions
 import org.zanata.proxyhook.common.Constants.EVENT_ID_HEADERS
 import org.zanata.proxyhook.common.Constants.MAX_FRAME_SIZE
 import org.zanata.proxyhook.common.Constants.PATH_WEBSOCKET
@@ -45,8 +45,13 @@ import org.zanata.proxyhook.common.Keys.HEADERS
 import org.zanata.proxyhook.common.Keys.PASSWORD
 import org.zanata.proxyhook.common.Keys.PING_ID
 import org.zanata.proxyhook.common.Keys.TYPE
+import org.zanata.proxyhook.common.MessageType
 import org.zanata.proxyhook.common.MessageType.LOGIN
 import org.zanata.proxyhook.common.MessageType.PONG
+import org.zanata.proxyhook.common.StartupException
+import org.zanata.proxyhook.common.exit
+import org.zanata.proxyhook.common.jsonToMultiMap
+import org.zanata.proxyhook.common.multiMapToJson
 import java.lang.System.getenv
 import java.net.InetAddress
 import java.net.URI
@@ -60,8 +65,8 @@ import java.net.UnknownHostException
  * @param ready optional Future which will complete when deployment is complete.
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? = null) : AbstractVerticle() {
-    constructor(ready: Future<Unit>?, vararg args: String) : this(ready, args.asList())
+class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? = null, val internalHttpProxy: Int? = null) : AbstractVerticle() {
+    constructor(ready: Future<Unit>?, vararg args: String, internalHttpProxy: Int? = null) : this(ready, args.asList(), internalHttpProxy)
 
     companion object {
         private val APP_NAME = ProxyHookClient::class.java.name
@@ -127,6 +132,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
                 .map { it.toLowerCase() }
 
         @JvmStatic fun main(args: Array<String>) {
+            // TODO add http proxy
             Vertx.vertx().deployVerticle(ProxyHookClient(ready = null, args = args.toList()), { result ->
                 result.otherwise { e ->
                     exit(e)
@@ -177,11 +183,24 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
             isSsl = useSSL
             isVerifyHost = !sslInsecureServer
             isTrustAll = sslInsecureServer
+            // this doesn't appear to affect websocket connections
+//            externalHttpProxy?.let { portNum ->
+//                proxyOptions = ProxyOptions().apply {
+//                    host = "localhost"
+//                    port = portNum
+//                }
+//            }
         }
         val wsClient = vertx.createHttpClient(wsOptions)
         val httpOptions = HttpClientOptions().apply {
             isVerifyHost = !sslInsecureDelivery
             isTrustAll = sslInsecureDelivery
+            internalHttpProxy?.let { portNum ->
+                proxyOptions = ProxyOptions().apply {
+                    host = "localhost"
+                    port = portNum
+                }
+            }
         }
         val httpClient = vertx.createHttpClient(httpOptions)
 

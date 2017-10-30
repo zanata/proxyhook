@@ -9,6 +9,7 @@ dependencies {
     testCompile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.18'
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
+    testCompile 'org.mock-server:mockserver-netty:3.11'
 }
 
 mainClassName = 'io.vertx.core.Launcher'
