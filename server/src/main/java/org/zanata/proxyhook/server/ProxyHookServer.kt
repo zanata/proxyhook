@@ -22,6 +22,7 @@ package org.zanata.proxyhook.server
 
 import io.vertx.core.Future
 import io.vertx.core.Vertx
+import io.vertx.core.VertxOptions
 import org.mindrot.jbcrypt.BCrypt
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.EventBus
@@ -92,12 +93,24 @@ class ProxyHookServer(
         var actualPort: Future<Int>? = null) : CoroutineVerticle() {
 
     companion object {
+        // Try these JVM arguments: -Djava.net.preferIPv4Stack=true -Djgroups.bind_addr=127.0.0.1
         @JvmStatic fun main(args: Array<String>) {
-            Vertx.vertx().deployVerticle(ProxyHookServer(port = null), { result ->
-                result.otherwise { e ->
-                    exit(e)
+            Vertx.clusteredVertx(VertxOptions().apply {
+//                clusterHost = "localhost"
+//                clusterPort = 0
+//                isClustered = true
+            }) { res ->
+                if (res.succeeded()) {
+                    res.result().deployVerticle(ProxyHookServer(port = null), { result ->
+                        result.otherwise { e ->
+                            exit(e)
+                        }
+                    }
+                    )
+                } else {
+                    exit(res.cause())
                 }
-            })
+            }
         }
     }
     private inner class ConnectionManager(val connections: AsyncMap<String, Boolean>, val connectionCount: Counter)
