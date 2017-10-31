@@ -4,7 +4,6 @@ import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.http.HttpServer
 import io.vertx.core.logging.LoggerFactory
-import io.vertx.ext.unit.junit.VertxUnitRunner
 import io.vertx.kotlin.coroutines.await
 import io.vertx.kotlin.coroutines.awaitResult
 import kotlinx.coroutines.experimental.runBlocking
@@ -13,7 +12,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.runner.RunWith
 import org.mockserver.client.proxy.ProxyClient
 import org.mockserver.junit.ProxyRule
 import org.mockserver.model.HttpRequest.request
@@ -23,7 +21,9 @@ import org.zanata.proxyhook.server.ProxyHookServer
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit.MILLISECONDS
 
-@RunWith(VertxUnitRunner::class)
+// We could use VertxUnitRunner, a RunTestOnContext rule and TestContext, but
+// this way we can run client, server and webhook receiver on separate Vert.x
+// instances.
 class IntegrationTest {
 
     companion object {
