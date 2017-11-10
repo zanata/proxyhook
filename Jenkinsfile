@@ -85,9 +85,19 @@ timestamps {
           // notify methods send instant messages about the build progress
           notify.started()
 
-          // Shallow Clone does not work with RHEL7, which uses git-1.8.3
-          // https://issues.jenkins-ci.org/browse/JENKINS-37229
-          checkout scm
+            // Shallow Clone does not work with RHEL7, which uses git-1.8.3
+            // https://issues.jenkins-ci.org/browse/JENKINS-37229
+            //
+            // New GitSCM default is --no-tag, need to override it so
+            // we can use tag in pipeline library
+            // See https://issues.jenkins-ci.org/browse/JENKINS-45164
+            checkout([
+              $class: 'GitSCM',
+              branches: scm.branches,
+              doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
+              extensions: [[$class: 'CloneOption', noTags: false, shallow: false, depth: 0, reference: '']],
+              userRemoteConfigs: scm.userRemoteConfigs,
+            ])
 
           // Clean the workspace
           sh "git clean -fdx"
