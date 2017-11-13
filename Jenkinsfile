@@ -3,9 +3,6 @@
 @Field
 public static final String PROJ_BASE = 'github.com/zanata/proxyhook'
 
-@Field
-public static final String PROJ_URL = "https://$PROJ_BASE"
-
 // Import pipeline library for utility methods & classes:
 // ansicolor(), Notifier, PullRequests, Strings
 @Field
@@ -41,7 +38,7 @@ def notify
 def projectProperties = [
   [
     $class: 'GithubProjectProperty',
-    projectUrlStr: PROJ_URL
+    projectUrlStr: "https://$PROJ_BASE"
   ],
   [
     $class: 'BuildDiscarderProperty',
@@ -76,7 +73,7 @@ timestamps {
     echo "running on node ${env.NODE_NAME}"
     pipelineLibraryScmGit = new ScmGit(env, steps, 'https://github.com/zanata/zanata-pipeline-library')
     pipelineLibraryScmGit.init(PIPELINE_LIBRARY_BRANCH)
-    mainScmGit = new ScmGit(env, steps, PROJ_URL)
+    mainScmGit = new ScmGit(env, steps, "https://$PROJ_BASE")
     mainScmGit.init(env.BRANCH_NAME)
     notify = new Notifier(env, steps, currentBuild,
         pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
