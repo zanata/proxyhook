@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
 @Field
-public static final String PROJ_URL = 'https://github.com/zanata/proxyhook'
+public static final String PROJ_BASE = 'github.com/zanata/proxyhook'
 
 // Import pipeline library for utility methods & classes:
 // ansicolor(), Notifier, PullRequests, Strings
@@ -38,7 +38,7 @@ def notify
 def projectProperties = [
   [
     $class: 'GithubProjectProperty',
-    projectUrlStr: PROJ_URL
+    projectUrlStr: "https://$PROJ_BASE"
   ],
   [
     $class: 'BuildDiscarderProperty',
@@ -73,7 +73,7 @@ timestamps {
     echo "running on node ${env.NODE_NAME}"
     pipelineLibraryScmGit = new ScmGit(env, steps, 'https://github.com/zanata/zanata-pipeline-library')
     pipelineLibraryScmGit.init(PIPELINE_LIBRARY_BRANCH)
-    mainScmGit = new ScmGit(env, steps, PROJ_URL)
+    mainScmGit = new ScmGit(env, steps, "https://$PROJ_BASE")
     mainScmGit.init(env.BRANCH_NAME)
     notify = new Notifier(env, steps, currentBuild,
         pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
@@ -124,13 +124,12 @@ timestamps {
         }
         stage('Deploy') {
           if (tag && isBuildResultSuccess()) {
+          withCredentials(
+            [[$class          : 'UsernamePasswordMultiBinding', credentialsId: 'zanata-jenkins',
+              usernameVariable: 'GIT_USERNAME', passwordVariable: 'GITHUB_OAUTH2_TOKEN']]) {
+            sh "git push https://$GIT_USERNAME:$GITHUB_OAUTH2_TOKEN@$PROJ_BASE $tag"
             // When https://issues.jenkins-ci.org/browse/JENKINS-28335 is done, use GitPublisher instead
-            sshagent(['zanata-jenkins']) {
-              def sshRepo = "git@github.com:zanata/proxyhook.git"
-              // TODO remove fetch, activate push
-              sh "git -c core.askpass=true fetch $sshRepo"
-//                sh "git -c core.askpass=true push $sshRepo $tag"
-            }
+          }
             // TODO deploy binaries, docker images
 /*
               // TODO deploy client
