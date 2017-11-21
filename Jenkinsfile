@@ -76,7 +76,7 @@ timestamps {
     mainScmGit = new ScmGit(env, steps, "https://$PROJ_BASE")
     mainScmGit.init(env.BRANCH_NAME)
     notify = new Notifier(env, steps, currentBuild,
-        pipelineLibraryScmGit, mainScmGit, 'Jenkinsfile',
+        pipelineLibraryScmGit, mainScmGit, (env.GITHUB_COMMIT_CONTEXT) ?: 'Jenkinsfile',
     )
     // generate logs in colour
     ansicolor {
