@@ -65,8 +65,17 @@ import java.net.UnknownHostException
  * @param ready optional Future which will complete when deployment is complete.
  * @author Sean Flanigan [sflaniga@redhat.com](mailto:sflaniga@redhat.com)
  */
-class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? = null, val internalHttpProxy: Int? = null) : AbstractVerticle() {
-    constructor(ready: Future<Unit>?, vararg args: String, internalHttpProxy: Int? = null) : this(ready, args.asList(), internalHttpProxy)
+class ProxyHookClient(
+        var ready: Future<Unit>? = null,
+        var args: List<String>? = null,
+        val internalHttpProxyHost: String? = null,
+        val internalHttpProxyPort: Int? = null) : AbstractVerticle() {
+    constructor(
+            ready: Future<Unit>?,
+            vararg args: String,
+            internalHttpProxyHost: String?,
+            internalHttpProxyPort: Int? = null) :
+            this(ready, args.asList(), internalHttpProxyHost, internalHttpProxyPort)
 
     companion object {
         private val APP_NAME = ProxyHookClient::class.java.name
@@ -167,6 +176,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
 
     private fun startClient(webSocketUrl: String, webhookUrls: List<String>, startFuture: Future<Void>) {
         log.info("starting client for websocket: $webSocketUrl posting to webhook URLs: $webhookUrls")
+        log.info("Using internal http proxy: $internalHttpProxyHost:$internalHttpProxyPort")
 
         webhookUrls.forEach { this.checkURI(it) }
 
@@ -195,7 +205,7 @@ class ProxyHookClient(var ready: Future<Unit>? = null, var args: List<String>? =
         val httpOptions = HttpClientOptions().apply {
             isVerifyHost = !sslInsecureDelivery
             isTrustAll = sslInsecureDelivery
-            internalHttpProxy?.let { portNum ->
+            internalHttpProxyPort?.let { portNum ->
                 proxyOptions = ProxyOptions().apply {
                     host = "localhost"
                     port = portNum

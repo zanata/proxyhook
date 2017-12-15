@@ -78,7 +78,7 @@ class IntegrationTest {
 
     @Test
     fun rootDeploymentWithProxy() {
-        deliverProxiedWebhook(prefix = "", internalHttpProxy = proxyRule.httpPort)
+        deliverProxiedWebhook(prefix = "", httpProxyHost = "localhost", httpProxyPort = proxyRule.httpPort)
 //        proxyClient.dumpToLogAsJSON(request())
         proxyClient.verify(request(), once())
     }
@@ -93,7 +93,7 @@ class IntegrationTest {
         verify(request(), exactly(0))
     }
 
-    private fun deliverProxiedWebhook(prefix: String, internalHttpProxy: Int? = null): Unit = runBlocking {
+    private fun deliverProxiedWebhook(prefix: String, httpProxyHost: String? = null, httpProxyPort: Int? = null): Unit = runBlocking {
         // this future will succeed if the test passes,
         // or fail if something goes wrong.
         val testFinished = CompletableFuture<Unit>()
@@ -105,7 +105,7 @@ class IntegrationTest {
         val websocketUrl = "ws://localhost:${serverPort.await()}$prefix/listen"
         val postUrl = "http://localhost:${serverPort.await()}$prefix/webhook"
         // wait for proxyhook server and webhook receiver before starting client
-        val client = startClient(testFinished, websocketUrl, receiveUrl, internalHttpProxy)
+        val client = startClient(testFinished, websocketUrl, receiveUrl, httpProxyHost, httpProxyPort)
 
         // wait for client login before sending webhook to proxyhook server
         client.await()
@@ -146,10 +146,10 @@ class IntegrationTest {
         actualPort
     }
 
-    private fun startClient(testFinished: CompletableFuture<Unit>, websocketUrl: String, receiveUrl: String, internalHttpProxy: Int?): Future<Unit> {
+    private fun startClient(testFinished: CompletableFuture<Unit>, websocketUrl: String, receiveUrl: String, internalHttpProxyHost: String?, internalHttpProxyPort: Int?): Future<Unit> {
         log.info("deploying client")
         val clientReady = Future.future<Unit>()
-        client.deployVerticle(ProxyHookClient(clientReady, websocketUrl, receiveUrl, internalHttpProxy = internalHttpProxy)) {
+        client.deployVerticle(ProxyHookClient(clientReady, websocketUrl, receiveUrl, internalHttpProxyHost = internalHttpProxyHost, internalHttpProxyPort = internalHttpProxyPort)) {
             if (it.failed()) {
                 testFinished.completeExceptionally(it.cause())
             }
