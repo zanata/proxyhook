@@ -45,39 +45,62 @@ class IntegrationTest {
 
     @Before
     fun before() = runBlocking {
-        val serverOpts = VertxOptions().apply {
-            clusterManager = io.vertx.test.fakecluster.FakeClusterManager()
-//            clusterManager = io.vertx.ext.cluster.infinispan.InfinispanClusterManager()
-            clusterHost = "localhost"
-            clusterPort = 0
-            isClustered = true
-        }
-        server = awaitResult {
-            Vertx.clusteredVertx(serverOpts, it)
-        }
         webhook = Vertx.vertx()
         client = Vertx.vertx()
     }
 
     @After
-    fun after() = runBlocking {
+    fun after() = runBlocking<Unit> {
         // to minimise shutdown errors:
         // 1. we want the client to stop delivering before the webhook receiver stops
         // 2. we want the client to disconnect from server before server stops
         awaitResult<Void> { client.close(it) }
         awaitResult<Void> { webhook.close(it) }
         awaitResult<Void> { server.close(it) }
-        Unit
     }
 
     @Test
     fun rootDeployment() {
+        server = Vertx.vertx()
+        deliverProxiedWebhook(prefix = "")
+        proxyClient.verifyZeroInteractions()
+    }
+
+    @Test
+    fun rootDeploymentInFakeCluster() {
+        server = runBlocking {
+            awaitResult<Vertx> {
+                val serverOpts = VertxOptions().apply {
+                    isClustered = true
+                    clusterManager = io.vertx.test.fakecluster.FakeClusterManager()
+                }
+                Vertx.clusteredVertx(serverOpts, it)
+            }
+        }
+        deliverProxiedWebhook(prefix = "")
+        proxyClient.verifyZeroInteractions()
+    }
+
+    @Test
+    fun rootDeploymentInInfinispanCluster() {
+        server = runBlocking {
+            awaitResult<Vertx> {
+                val serverOpts = VertxOptions().apply {
+                    isClustered = true
+                    clusterManager = io.vertx.ext.cluster.infinispan.InfinispanClusterManager()
+                    clusterHost = "localhost"
+                    clusterPort = 0
+                }
+                Vertx.clusteredVertx(serverOpts, it)
+            }
+        }
         deliverProxiedWebhook(prefix = "")
         proxyClient.verifyZeroInteractions()
     }
 
     @Test
     fun rootDeploymentWithProxy() {
+        server = Vertx.vertx()
         deliverProxiedWebhook(prefix = "", httpProxyHost = "localhost", httpProxyPort = proxyRule.httpPort)
 //        proxyClient.dumpToLogAsJSON(request())
         proxyClient.verify(request(), once())
@@ -85,6 +108,7 @@ class IntegrationTest {
 
     @Test
     fun subPathDeployment() {
+        server = Vertx.vertx()
         deliverProxiedWebhook(prefix = "/proxyhook")
         proxyClient.verifyZeroInteractions()
     }

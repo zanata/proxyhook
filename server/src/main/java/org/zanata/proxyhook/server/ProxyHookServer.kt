@@ -20,7 +20,10 @@
  */
 package org.zanata.proxyhook.server
 
+import io.vertx.core.AsyncResult
 import io.vertx.core.Future
+import io.vertx.core.Future.succeededFuture
+import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
 import org.mindrot.jbcrypt.BCrypt
@@ -115,23 +118,35 @@ class ProxyHookServer(
     }
     private inner class ConnectionManager(val connections: AsyncMap<String, Boolean>, val connectionCount: Counter)
 
+    private val sharedData by lazy { vertx.sharedData() }
     private val eventBus: EventBus get() = vertx.eventBus()
     private val passhash: String? = getenv(PROXYHOOK_PASSHASH)
     // map of websockets which are connected directly to this verticle (not via clustering)
     // TODO a plain local HashMap might be more appropriate
-    private val localConnections: LocalMap<String, Boolean> by lazy {
-        vertx.sharedData().getLocalMap<String, Boolean>("localConnections")
+    private val localConnections by lazy {
+        sharedData.getLocalMap<String, Boolean>("localConnections")
     }
     private lateinit var manager: ConnectionManager
+
+    fun <K, V> getAsyncMap(name: String, resultHandler: Handler<AsyncResult<AsyncMap<K, V>>>) {
+        if (vertx.isClustered) {
+            log.info("Vert.x is in cluster mode: returning a cluster-wide map")
+            sharedData.getClusterWideMap(name, resultHandler)
+        } else {
+            log.info("Vert.x is not in cluster mode: wrapping a LocalMap")
+            val asyncMap = LocalAsyncMap<K, V>(sharedData.getLocalMap(name))
+            resultHandler.handle(succeededFuture(asyncMap))
+        }
+    }
 
     suspend override fun start() {
         // a counter of websocket connections across the vert.x cluster
         val connectionCount: Counter = awaitResult {
-            vertx.sharedData().getCounter("connectionCount", it)
+            sharedData.getCounter("connectionCount", it)
         }
         // a map of websocket connections across the vert.x cluster
         val connections: AsyncMap<String, Boolean> = awaitResult {
-            vertx.sharedData().getClusterWideMap<String, Boolean>("connections", it)
+            getAsyncMap("connections", it)
         }
         this.manager = ConnectionManager(connections, connectionCount)
 
