@@ -10,21 +10,23 @@ sourceSets {
 
 dependencies {
     compile project(':common')
+    compile 'com.xenomachina:kotlin-argparser:2.0.4'
+    compile "io.vertx:vertx-shell:$vertx_version"
     testCompile project(':server')
     testCompile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:0.18'
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
     testCompile 'org.mock-server:mockserver-netty:3.11'
     // for FakeClusterManager: https://github.com/eclipse/vert.x/issues/2191
-    testCompile 'io.vertx:vertx-core:3.5.0:tests'
+    testCompile "io.vertx:vertx-core:$vertx_version:tests"
     // Enabling this should cause the IDE to download the source for
     // FakeClusterManager. (You'll still have to select Choose Sources on
     // FakeClusterManager.class, then browse to the test-sources jar in a
     // nearby directory.)
-//    testSourcesCompile 'io.vertx:vertx-core:3.5.0:test-sources'
+//    testSourcesCompile "io.vertx:vertx-core:$vertx_version:test-sources"
 
-//    compile 'io.vertx:vertx-hazelcast:3.5.0'
-//    compile 'io.vertx:vertx-infinispan:3.5.0'
+//    compile "io.vertx:vertx-hazelcast:$vertx_version"
+//    compile "io.vertx:vertx-infinispan:$vertx_version"
 //    // http://vertx.io/docs/vertx-infinispan/java/#_configuring_for_kubernetes_or_openshift_3
 //    compile 'org.infinispan:infinispan-cloud:9.1.2.Final'
 //    compile 'org.jgroups.kubernetes:jgroups-kubernetes:1.0.3.Final'

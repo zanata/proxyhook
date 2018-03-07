@@ -6,7 +6,7 @@ plugins {
 dependencies {
     compile project(':common')
     compile 'de.svenkubiak:jBCrypt:0.4.1'
-    runtime 'io.vertx:vertx-infinispan:3.5.0'
+    runtime "io.vertx:vertx-infinispan:$vertx_version"
 //    // http://vertx.io/docs/vertx-infinispan/java/#_configuring_for_kubernetes_or_openshift_3
     runtime 'org.infinispan:infinispan-cloud:9.1.2.Final'
 }
