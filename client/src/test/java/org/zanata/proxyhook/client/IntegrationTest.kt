@@ -173,7 +173,7 @@ class IntegrationTest {
     private fun startClient(testFinished: CompletableFuture<Unit>, websocketUrl: String, receiveUrl: String, internalHttpProxyHost: String?, internalHttpProxyPort: Int?): Future<Unit> {
         log.info("deploying client")
         val clientReady = Future.future<Unit>()
-        client.deployVerticle(ProxyHookClient(clientReady, websocketUrl, receiveUrl, internalHttpProxyHost = internalHttpProxyHost, internalHttpProxyPort = internalHttpProxyPort)) {
+        client.deployVerticle(ProxyHookClient(clientReady, listOf(websocketUrl), listOf(receiveUrl), internalHttpProxyHost = internalHttpProxyHost, internalHttpProxyPort = internalHttpProxyPort)) {
             if (it.failed()) {
                 testFinished.completeExceptionally(it.cause())
             }
