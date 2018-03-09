@@ -21,8 +21,6 @@
 package org.zanata.proxyhook.server
 
 import io.vertx.core.Future
-import io.vertx.core.Vertx
-import io.vertx.core.VertxOptions
 import org.mindrot.jbcrypt.BCrypt
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.EventBus
@@ -67,7 +65,6 @@ import org.zanata.proxyhook.common.MessageType.PONG
 import org.zanata.proxyhook.common.MessageType.SUCCESS
 import org.zanata.proxyhook.common.MessageType.WEBHOOK
 import org.zanata.proxyhook.common.StartupException
-import org.zanata.proxyhook.common.exit
 import org.zanata.proxyhook.common.multiMapToJson
 import java.lang.System.getenv
 import java.net.InetAddress
@@ -89,28 +86,6 @@ class ProxyHookServer(
         private val port: Int? = null,
         private val prefix: String = getenv("PROXYHOOK_PREFIX") ?: "",
         var actualPort: Future<Int>? = null) : CoroutineVerticle() {
-
-    companion object {
-        // Try these JVM arguments: -Djava.net.preferIPv4Stack=true -Djgroups.bind_addr=127.0.0.1
-        @JvmStatic fun main(args: Array<String>) {
-            Vertx.clusteredVertx(VertxOptions().apply {
-//                clusterHost = "localhost"
-//                clusterPort = 0
-//                isClustered = true
-            }) { res ->
-                if (res.succeeded()) {
-                    res.result().deployVerticle(ProxyHookServer(port = null), { result ->
-                        result.otherwise { e ->
-                            exit(e)
-                        }
-                    }
-                    )
-                } else {
-                    exit(res.cause())
-                }
-            }
-        }
-    }
 
     private val sharedData by lazy { vertx.sharedData() }
     private val eventBus: EventBus get() = vertx.eventBus()
@@ -345,7 +320,7 @@ class ProxyHookServer(
         eventBus.send(connection, obj.encode())
     }
 
-    /**
+    /*
      * Extension methods to simplify coroutine usage for various WebSocket handlers
      */
     private fun WebSocketBase.coroutineHandler(fn : suspend (Buffer) -> Unit) {
@@ -456,9 +431,10 @@ internal fun treatAsUTF8(contentType: String?): Boolean {
     }
 }
 
-/**
+/*
  * An extension method for simplifying coroutines usage with Vert.x Web routers
  */
+@Suppress("Detekt.TooGenericExceptionCaught")
 private fun Route.coroutineHandler(fn : suspend (RoutingContext) -> Unit) {
     handler { ctx ->
         launch(ctx.vertx().dispatcher()) {

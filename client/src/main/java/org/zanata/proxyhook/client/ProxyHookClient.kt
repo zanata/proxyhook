@@ -146,6 +146,9 @@ class ProxyHookClient(
                 // deliberately not included: Connection, Host, Origin, If-*, Cache-Control, Proxy-Authorization, Range, Upgrade
                 .map { it.toLowerCase() }
 
+        /**
+         * Main method, used to launch proxyhook client with CLI arguments
+         */
         @JvmStatic fun main(args: Array<String>) = mainBody(APP_NAME) {
             class MyArgs (parser: ArgParser) {
                 val webSocketUrls: List<String> by parser.adding("-s", "--websocket", help = "connect to websocket (proxyhook server), eg wss://proxyhook.example.com/");
