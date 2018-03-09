@@ -20,10 +20,7 @@
  */
 package org.zanata.proxyhook.server
 
-import io.vertx.core.AsyncResult
 import io.vertx.core.Future
-import io.vertx.core.Future.succeededFuture
-import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
 import org.mindrot.jbcrypt.BCrypt
@@ -38,8 +35,6 @@ import io.vertx.core.http.WebSocketBase
 import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
 import io.vertx.core.shareddata.AsyncMap
-import io.vertx.core.shareddata.Counter
-import io.vertx.core.shareddata.LocalMap
 import io.vertx.ext.web.Route
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
@@ -116,39 +111,20 @@ class ProxyHookServer(
             }
         }
     }
-    private inner class ConnectionManager(val connections: AsyncMap<String, Boolean>, val connectionCount: Counter)
 
     private val sharedData by lazy { vertx.sharedData() }
     private val eventBus: EventBus get() = vertx.eventBus()
     private val passhash: String? = getenv(PROXYHOOK_PASSHASH)
     // map of websockets which are connected directly to this verticle (not via clustering)
-    // TODO a plain local HashMap might be more appropriate
-    private val localConnections by lazy {
-        sharedData.getLocalMap<String, Boolean>("localConnections")
-    }
-    private lateinit var manager: ConnectionManager
+    private val localConnections = HashSet<String>()
+    // map of websocket IDs to TRUE (used like a Set)
+    private lateinit var connections: AsyncMap<String, Boolean>
 
-    fun <K, V> getAsyncMap(name: String, resultHandler: Handler<AsyncResult<AsyncMap<K, V>>>) {
-        if (vertx.isClustered) {
-            log.info("Vert.x is in cluster mode: returning a cluster-wide map")
-            sharedData.getClusterWideMap(name, resultHandler)
-        } else {
-            log.info("Vert.x is not in cluster mode: wrapping a LocalMap")
-            val asyncMap = LocalAsyncMap<K, V>(sharedData.getLocalMap(name))
-            resultHandler.handle(succeededFuture(asyncMap))
-        }
-    }
-
-    suspend override fun start() {
-        // a counter of websocket connections across the vert.x cluster
-        val connectionCount: Counter = awaitResult {
-            sharedData.getCounter("connectionCount", it)
-        }
+    override suspend fun start() {
         // a map of websocket connections across the vert.x cluster
-        val connections: AsyncMap<String, Boolean> = awaitResult {
-            getAsyncMap("connections", it)
+        connections = awaitResult {
+            sharedData.getAsyncMap("connections", it)
         }
-        this.manager = ConnectionManager(connections, connectionCount)
 
         if (passhash != null) {
             log.info("password is set")
@@ -171,7 +147,7 @@ class ProxyHookServer(
 
         vertx.setPeriodic(50_000) {
             // in a cluster, we should only ping websockets connected to this verticle directly
-            localConnections.keys.forEach(this::pingConnection)
+            localConnections.forEach(this::pingConnection)
         }
 
         val router = Router.router(vertx)
@@ -222,16 +198,22 @@ class ProxyHookServer(
         }
     }
 
+    // The prefix "fetch" is because this is a bit expensive
+    private suspend fun fetchConnectionCount(): Int {
+        return awaitResult { connections.size(it) }
+    }
+
     private suspend fun rootHandler(context: RoutingContext) {
-        val count = awaitResult<Long> { manager.connectionCount.get(it) }
+        val count = fetchConnectionCount()
         context.response().setStatusCode(HTTP_OK).end(APP_NAME + " (" + describe(count) + ")")
     }
 
     private suspend fun readyHandler(context: RoutingContext) {
-        val count = awaitResult<Long> { manager.connectionCount.get(it) }
+        val count = fetchConnectionCount()
         context.response()
-                // if there are no connections, webhooks won't be delivered, thus HTTP_SERVICE_UNAVAILABLE
-                .setStatusCode(if (count == 0L) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
+                // if there are no connections, webhooks won't be delivered, thus
+                // HTTP_SERVICE_UNAVAILABLE (allows web pingers to check if it's all working)
+                .setStatusCode(if (count == 0) HTTP_SERVICE_UNAVAILABLE else HTTP_OK)
                 .end(APP_NAME + " (" + describe(count) + ")")
     }
 
@@ -242,7 +224,7 @@ class ProxyHookServer(
         EVENT_ID_HEADERS
                 .filter { headers.contains(it) }
                 .forEach { log.info("{0}: {1}", it, headers.getAll(it)) }
-        val listeners = awaitResult<Set<String>> { manager.connections.keys(it) }
+        val listeners = awaitResult<Set<String>> { connections.keys(it) }
         log.info("handling POST for {0} listeners", listeners.size)
         val statusCode: Int
         if (!listeners.isEmpty()) {
@@ -330,31 +312,25 @@ class ProxyHookServer(
         val id = webSocket.textHandlerID()
         val clientIP = getClientIP(webSocket)
         log.info("Adding connection. ID: $id IP: $clientIP")
-        localConnections.put(id, true)
-        val connections = manager.connections
-        awaitResult<Void> { connections.put(id, true, it) }
-        log.info("Connection registered with cluster")
-        val connectionCount = manager.connectionCount
-        val incCount = awaitResult<Long> { connectionCount.incrementAndGet(it) }
-        log.info("New connection counted: cluster has {0} connections", incCount)
+        localConnections.add(id)
         log.info("Total local connections: {0}", localConnections.size)
+        val connections = connections
+        awaitResult<Void> { connections.put(id, true, it) }
+        log.info("Connection added: now {0} connections to cluster", fetchConnectionCount())
+
         webSocket.closeCoroutineHandler {
             log.info("Connection closed. ID: {0} IP: {1}", id, clientIP)
             localConnections.remove(id)
-            awaitResult<Boolean> { connections.remove(id, it) }
-            log.info("Connection removed from cluster")
-            val decCount = awaitResult<Long> { connectionCount.decrementAndGet(it) }
-            log.info("Closed connection counted: cluster has {0} connections", decCount)
             log.info("Total local connections: {0}", localConnections.size)
+            awaitResult<Boolean> { connections.remove(id, it) }
+            log.info("Connection removed: now {0} connections to cluster", fetchConnectionCount())
         }
         webSocket.exceptionCoroutineHandler { e ->
             log.warn("Connection error. ID: {0} IP: {1}", e, id, clientIP)
             localConnections.remove(id)
-            awaitResult<Boolean> { connections.remove(id, it) }
-            log.info("Broken connection removed from cluster")
-            val decCount = awaitResult<Long> { connectionCount.decrementAndGet(it) }
-            log.info("Broken connection counted: cluster has {0} connections", decCount)
             log.info("Total local connections: {0}", localConnections.size)
+            awaitResult<Boolean> { connections.remove(id, it) }
+            log.info("Broken connection removed: now {0} connections to cluster", fetchConnectionCount())
         }
     }
 
@@ -424,12 +400,10 @@ private val localHostName: String by lazy {
 internal fun describe(size: Int): String = describe(size.toLong())
 
 // visible for testing
-internal fun describe(size: Long): String {
-    if (size == 1L) {
-        return "1 listener"
-    } else {
-        return "" + size + " listeners"
-    }
+internal fun describe(size: Long): String = if (size == 1L) {
+    "1 listener"
+} else {
+    "$size listeners"
 }
 
 private fun getClientIP(webSocket: ServerWebSocket): String {
@@ -469,16 +443,16 @@ internal fun treatAsUTF8(contentType: String?): Boolean {
             .filter { it.matches("charset=(utf-?8|ascii)".toRegex()) }
             .forEach { return true }
     // otherwise we infer charset based on the content type:
-    when (contentType) {
+    return when (contentType) {
     // JSON only allows Unicode.
         "application/json",
             // XML defaults to Unicode.
             // An XML doc could specify another (non-Unicode) charset internally, but we don't support this.
         "application/xml",
             // Defaults to ASCII:
-        "text/xml" -> return true
+        "text/xml" -> true
     // If in doubt, treat as non-Unicode (or binary)
-        else -> return false
+        else -> false
     }
 }
 
