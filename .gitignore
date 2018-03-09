@@ -6,3 +6,9 @@ build/
 out/
 *.jar
 *.keystore
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/

@@ -18,13 +18,16 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package hudson;
+package hudson
 
-import java.io.IOException;
+import java.io.IOException
 
 /**
  * Fake class for Jenkinsfile unit tests (without needing Jenkins Core on classpath).
  * @author Sean Flanigan <a href="mailto:sflaniga@redhat.com">sflaniga@redhat.com</a>
  */
-public class AbortException extends IOException {
+class AbortException : IOException() {
+    companion object {
+        private val serialVersionUID = 1L
+    }
 }

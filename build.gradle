@@ -10,8 +10,10 @@ buildscript {
 }
 
 subprojects {
+  apply plugin: 'eclipse'
   apply plugin: 'kotlin'
   apply plugin: 'jacoco'
+  eclipse.project.name = rootProject.name + '-' + project.name
   // TODO set up detekt
 
   repositories {
