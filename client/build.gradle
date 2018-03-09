@@ -3,11 +3,6 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '1.2.3'
 }
 
-sourceSets {
-    // Just for testSourcesCompile (see below)
-    testSources
-}
-
 dependencies {
     compile project(':common')
     compile 'com.xenomachina:kotlin-argparser:2.0.4'
@@ -17,13 +12,6 @@ dependencies {
     testCompile 'org.asynchttpclient:async-http-client:2.1.0-alpha20'
     testRuntime 'org.slf4j:slf4j-simple:1.7.25'
     testCompile 'org.mock-server:mockserver-netty:3.11'
-    // for FakeClusterManager: https://github.com/eclipse/vert.x/issues/2191
-    testCompile "io.vertx:vertx-core:$vertx_version:tests"
-    // Enabling this should cause the IDE to download the source for
-    // FakeClusterManager. (You'll still have to select Choose Sources on
-    // FakeClusterManager.class, then browse to the test-sources jar in a
-    // nearby directory.)
-//    testSourcesCompile "io.vertx:vertx-core:$vertx_version:test-sources"
 
 //    compile "io.vertx:vertx-hazelcast:$vertx_version"
 //    compile "io.vertx:vertx-infinispan:$vertx_version"

@@ -67,21 +67,6 @@ class IntegrationTest {
     }
 
     @Test
-    fun rootDeploymentInFakeCluster() {
-        server = runBlocking {
-            awaitResult<Vertx> {
-                val serverOpts = VertxOptions().apply {
-                    isClustered = true
-                    clusterManager = io.vertx.test.fakecluster.FakeClusterManager()
-                }
-                Vertx.clusteredVertx(serverOpts, it)
-            }
-        }
-        deliverProxiedWebhook(prefix = "")
-        proxyClient.verifyZeroInteractions()
-    }
-
-    @Test
     fun rootDeploymentInInfinispanCluster() {
         server = runBlocking {
             awaitResult<Vertx> {
